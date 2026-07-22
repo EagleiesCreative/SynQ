@@ -3,7 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { useSignIn } from "@clerk/nextjs";
+import { useSignIn, useAuth, useClerk } from "@clerk/nextjs";
 import type { SupportedOAuthStrategy } from "@/lib/auth-strategy";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Input, Label } from "@/components/ui/Input";
@@ -24,7 +24,10 @@ function Logo() {
 
 export default function LoginPage() {
   const { signIn, errors, fetchStatus } = useSignIn();
+  const { isSignedIn } = useAuth();
+  const clerk = useClerk();
   const router = useRouter();
+  const [signingOut, setSigningOut] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
@@ -72,6 +75,36 @@ export default function LoginPage() {
       redirectUrl: "/admin",
     });
     if (error) setOauthBusy(null);
+  }
+
+  if (isSignedIn) {
+    return (
+      <main className="min-h-screen flex items-center justify-center px-6 py-16 bg-background">
+        <div className="w-full max-w-sm text-center">
+          <Logo />
+          <h1 className="text-xl font-semibold text-slate-900">You&apos;re already signed in</h1>
+          <p className="mt-1 text-sm text-slate-500">
+            Head to your dashboard, or sign out to use a different account.
+          </p>
+          <div className="mt-6 space-y-2">
+            <Button className="w-full" onClick={() => router.push("/admin")}>
+              Go to dashboard
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full"
+              disabled={signingOut}
+              onClick={async () => {
+                setSigningOut(true);
+                await clerk.signOut();
+              }}
+            >
+              Sign out
+            </Button>
+          </div>
+        </div>
+      </main>
+    );
   }
 
   if (signIn.status === "needs_client_trust") {
