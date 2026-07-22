@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useClerk, useSignIn, useSignUp } from "@clerk/nextjs";
+import { Button } from "@/components/ui/Button";
 
 /**
  * Completes an OAuth (Google / Apple / GitHub) sign-in or sign-up started
@@ -17,14 +18,20 @@ export default function SsoCallbackPage() {
   const { signUp } = useSignUp();
   const router = useRouter();
   const hasRun = useRef(false);
+  const resolvedRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [stuckInfo, setStuckInfo] = useState<string | null>(null);
+  const [timedOut, setTimedOut] = useState(false);
 
-  const navigateToLogin = () => router.push("/login");
+  const navigateToLogin = () => {
+    resolvedRef.current = true;
+    router.push("/login");
+  };
 
   const finalizeSignIn = async () => {
     await signIn.finalize({
       navigate: async ({ session, decorateUrl }) => {
+        resolvedRef.current = true;
         if (session?.currentTask) return;
         const url = decorateUrl("/admin");
         if (url.startsWith("http")) window.location.href = url;
@@ -36,6 +43,7 @@ export default function SsoCallbackPage() {
   const finalizeSignUp = async () => {
     await signUp.finalize({
       navigate: async ({ session, decorateUrl }) => {
+        resolvedRef.current = true;
         if (session?.currentTask) return;
         const url = decorateUrl("/admin");
         if (url.startsWith("http")) window.location.href = url;
@@ -43,6 +51,24 @@ export default function SsoCallbackPage() {
       },
     });
   };
+
+  // Watchdog: if nothing above has resolved (navigated away, or surfaced an
+  // error/stuckInfo message) within a few seconds, stop trusting the effect
+  // and show a manual escape hatch based on directly-observable Clerk state.
+  // This guards against any await inside the effect hanging silently.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      if (!resolvedRef.current) {
+        const info = `timeout after 6s - clerk.loaded=${clerk.loaded} hasActiveSession=${!!clerk.session} signIn.status=${
+          signIn?.status ?? "n/a"
+        } signUp.status=${signUp?.status ?? "n/a"}`;
+        console.error("[sso-callback] watchdog timeout:", info);
+        setTimedOut(true);
+      }
+    }, 6000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -79,6 +105,7 @@ export default function SsoCallbackPage() {
             await finalizeSignUp();
             return;
           }
+          resolvedRef.current = true;
           return router.push("/register");
         }
 
@@ -98,6 +125,7 @@ export default function SsoCallbackPage() {
             await clerk.setActive({
               session: sessionId,
               navigate: async ({ session, decorateUrl }) => {
+                resolvedRef.current = true;
                 if (session?.currentTask) return;
                 const url = decorateUrl("/admin");
                 if (url.startsWith("http")) window.location.href = url;
@@ -106,6 +134,14 @@ export default function SsoCallbackPage() {
             });
             return;
           }
+        }
+
+        // Already have an active session (e.g. this URL was reloaded/revisited
+        // after sign-in already completed) - just send them on.
+        if (clerk.session) {
+          resolvedRef.current = true;
+          router.push("/admin");
+          return;
         }
 
         // None of the above matched. Surface the raw state instead of
@@ -123,17 +159,29 @@ export default function SsoCallbackPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clerk, signIn, signUp]);
 
-  if (error || stuckInfo) {
+  if (error || stuckInfo || timedOut) {
     return (
       <main className="min-h-screen flex items-center justify-center bg-background px-6">
         <div className="text-center max-w-sm">
           <p className="text-sm font-medium text-slate-900">
-            We couldn&apos;t finish signing you in.
+            We couldn&apos;t finish signing you in automatically.
           </p>
           {error && <p className="mt-2 text-sm text-rose-600">{error}</p>}
           {stuckInfo && !error && (
             <p className="mt-2 text-xs font-mono text-slate-400 break-words">{stuckInfo}</p>
           )}
+          {timedOut && !error && !stuckInfo && (
+            <p className="mt-2 text-xs font-mono text-slate-400 break-words">
+              {`clerk.loaded=${String(clerk.loaded)} hasActiveSession=${String(!!clerk.session)}`}
+            </p>
+          )}
+
+          {clerk.session && (
+            <Button className="mt-4 w-full" onClick={() => router.push("/admin")}>
+              Continue to dashboard
+            </Button>
+          )}
+
           <Link
             href="/login"
             className="mt-4 inline-block text-sm font-medium text-brand-600 hover:underline"
