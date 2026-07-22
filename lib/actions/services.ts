@@ -9,33 +9,35 @@ export async function addService(input: {
   description: string | null;
   color: string;
   sortOrder: number;
-  organizationId: string;
+  /** Ignored — the service is always created in the caller's own org. */
+  organizationId?: string;
 }) {
-  const { db } = await requireAdmin();
+  const { db, orgId } = await requireAdmin();
   const { error } = await db.from("services").insert({
     name: input.name,
     code: input.code,
     description: input.description,
     color: input.color,
     sort_order: input.sortOrder,
-    organization_id: input.organizationId,
+    organization_id: orgId,
   });
   if (error) throw new Error(error.message);
 }
 
 export async function toggleServiceActive(serviceId: string, isActive: boolean) {
-  const { db } = await requireAdmin();
+  const { db, orgId } = await requireAdmin();
   const { error } = await db
     .from("services")
     .update({ is_active: isActive })
-    .eq("id", serviceId);
+    .eq("id", serviceId)
+    .eq("organization_id", orgId);
   if (error) throw new Error(error.message);
 }
 
 export async function updateService(
   service: Pick<Service, "id" | "name" | "code" | "description" | "color">
 ) {
-  const { db } = await requireAdmin();
+  const { db, orgId } = await requireAdmin();
   const { error } = await db
     .from("services")
     .update({
@@ -44,18 +46,25 @@ export async function updateService(
       description: service.description,
       color: service.color,
     })
-    .eq("id", service.id);
+    .eq("id", service.id)
+    .eq("organization_id", orgId);
   if (error) throw new Error(error.message);
 }
 
 export async function deleteService(serviceId: string) {
-  const { db } = await requireAdmin();
-  const { error } = await db.from("services").delete().eq("id", serviceId);
+  const { db, orgId } = await requireAdmin();
+  const { error } = await db
+    .from("services")
+    .delete()
+    .eq("id", serviceId)
+    .eq("organization_id", orgId);
   if (error) throw new Error(error.message);
 }
 
 export async function restoreService(service: Service) {
-  const { db } = await requireAdmin();
-  const { error } = await db.from("services").insert(service);
+  const { db, orgId } = await requireAdmin();
+  const { error } = await db
+    .from("services")
+    .insert({ ...service, organization_id: orgId });
   if (error) throw new Error(error.message);
 }

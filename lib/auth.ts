@@ -1,6 +1,6 @@
 import { currentUser } from "@clerk/nextjs/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import type { Profile, StaffRole } from "@/lib/database.types";
+import type { Profile } from "@/lib/database.types";
 
 export interface CurrentUser {
   id: string;
@@ -13,6 +13,11 @@ export interface CurrentUser {
  * only owns identity). Supabase RLS can no longer gate this lookup by
  * auth.uid() (there is no Supabase Auth session anymore), so it's done
  * with the service-role client, entirely in application code.
+ *
+ * Provisioning model (POS-style, multi-tenant): whoever signs in gets their
+ * OWN organization and is its admin/owner. Nobody is ever auto-dropped into
+ * someone else's organization — joining an existing team is an explicit,
+ * opt-in action via a join code (see lib/actions/organization.ts).
  */
 export async function getCurrentUserAndProfile(): Promise<{
   user: CurrentUser | null;
@@ -34,19 +39,18 @@ export async function getCurrentUserAndProfile(): Promise<{
   const user: CurrentUser = { id: clerkUser.id, email };
   const admin = createAdminClient();
 
-  let profile: Profile | null = null;
-
   const { data: byId } = await admin
     .from("profiles")
     .select("*")
     .eq("id", clerkUser.id)
     .maybeSingle();
-  profile = byId as Profile | null;
+  let profile = byId as Profile | null;
 
   // First time this Clerk identity has signed in. If a profile already
-  // exists under the same email (the pre-Clerk Supabase-Auth account),
-  // re-parent it onto the new Clerk id instead of creating a duplicate
-  // and silently losing that person's role/organization.
+  // exists under the same email (the pre-Clerk Supabase-Auth account, or a
+  // teammate pre-provisioned by an admin), re-parent it onto the new Clerk
+  // id instead of creating a duplicate and silently losing their
+  // role/organization.
   if (!profile && email) {
     const { data: existing } = await admin
       .from("profiles")
@@ -65,49 +69,47 @@ export async function getCurrentUserAndProfile(): Promise<{
     }
   }
 
+  // Brand-new person: give them their own organization and make them its
+  // owner/admin. They can later join someone else's team with a join code.
   if (!profile) {
-    const { count } = await admin
-      .from("profiles")
-      .select("id", { count: "exact", head: true });
+    const { data: org, error: orgError } = await admin
+      .from("organizations")
+      .insert({ name: `${fullName}'s Organization` })
+      .select("id")
+      .single();
+    if (orgError || !org) return { user, profile: null };
 
-    let role: StaffRole;
-    let organizationId: string;
-
-    if (!count) {
-      // First staff member ever: becomes admin and gets a new organization.
-      role = "admin";
-      const { data: org, error } = await admin
-        .from("organizations")
-        .insert({ name: `${fullName}'s Organization` })
-        .select("id")
-        .single();
-      if (error || !org) return { user, profile: null };
-      organizationId = org.id;
-    } else {
-      // Everyone else joins the existing organization as an agent.
-      role = "agent";
-      const { data: org, error } = await admin
-        .from("organizations")
-        .select("id")
-        .order("created_at", { ascending: true })
-        .limit(1)
-        .single();
-      if (error || !org) return { user, profile: null };
-      organizationId = org.id;
-    }
-
-    const { data: created } = await admin
+    const { data: created, error: profileError } = await admin
       .from("profiles")
       .insert({
         id: clerkUser.id,
         full_name: fullName,
-        role,
-        organization_id: organizationId,
+        role: "admin",
+        organization_id: org.id,
         email,
       })
       .select("*")
       .single();
-    profile = created as Profile | null;
+
+    if (profileError || !created) {
+      // Don't leave an orphaned, unreachable organization behind.
+      await admin.from("organizations").delete().eq("id", org.id);
+      return { user, profile: null };
+    }
+
+    await admin
+      .from("organizations")
+      .update({ owner_id: clerkUser.id })
+      .eq("id", org.id);
+
+    // Every organization needs its own queue settings row.
+    await admin
+      .from("app_settings")
+      .insert({ organization_id: org.id, is_open: true })
+      .select("organization_id")
+      .maybeSingle();
+
+    profile = created as Profile;
   }
 
   return { user, profile };

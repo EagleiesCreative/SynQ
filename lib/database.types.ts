@@ -11,6 +11,10 @@ export type StaffRole = "admin" | "agent";
 export interface Organization {
   id: string;
   name: string;
+  /** Clerk id of the staff member who owns this organization. */
+  owner_id: string | null;
+  /** Short shareable code teammates use to join this organization. */
+  join_code: string;
   created_at: string;
 }
 
@@ -64,11 +68,12 @@ export interface Profile {
   full_name: string;
   role: StaffRole;
   organization_id: string | null;
+  email: string | null;
   created_at: string;
 }
 
 export interface AppSettings {
-  id: boolean;
+  organization_id: string;
   max_queue_size: number | null;
   opens_at: string | null;
   closes_at: string | null;
