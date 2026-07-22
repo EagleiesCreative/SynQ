@@ -48,8 +48,8 @@ export function JoinTeamForm({
             You&apos;re set up as an agent. An admin can promote you if you need
             more access.
           </p>
-          <Button className="mt-5 w-full" onClick={() => router.push("/counter")}>
-            Go to my counter
+          <Button className="mt-5 w-full" onClick={() => router.push("/admin")}>
+            Go to the queue
           </Button>
         </CardContent>
       </Card>

@@ -42,32 +42,28 @@ export async function joinOrganizationByCode(code: string) {
     .eq("id", userId);
   if (error) throw new Error(error.message);
 
-  // Clean up the organization they just left, but only if it is now empty
-  // and has no data of its own. Never touch an org with other members.
+  // Clean up the organization they just left, but only if nobody else is in
+  // it and its queue was never used. Never touch an org with other members.
   if (previousOrgId) {
-    const [{ count: members }, { count: services }, { count: counters }] =
-      await Promise.all([
-        db
-          .from("profiles")
-          .select("id", { count: "exact", head: true })
-          .eq("organization_id", previousOrgId),
-        db
-          .from("services")
-          .select("id", { count: "exact", head: true })
-          .eq("organization_id", previousOrgId),
-        db
-          .from("counters")
-          .select("id", { count: "exact", head: true })
-          .eq("organization_id", previousOrgId),
-      ]);
+    const { count: members } = await db
+      .from("profiles")
+      .select("id", { count: "exact", head: true })
+      .eq("organization_id", previousOrgId);
 
-    if (!members && !services && !counters) {
-      await db.from("organizations").delete().eq("id", previousOrgId);
+    if (!members) {
+      const { data: events } = await db
+        .from("events")
+        .select("last_number")
+        .eq("organization_id", previousOrgId);
+
+      const untouched = (events || []).every((e) => (e.last_number ?? 0) === 0);
+      if (untouched) {
+        await db.from("organizations").delete().eq("id", previousOrgId);
+      }
     }
   }
 
   revalidatePath("/admin", "layout");
-  revalidatePath("/counter");
   return { organizationName: target.name as string, alreadyMember: false };
 }
 

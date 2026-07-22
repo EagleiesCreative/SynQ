@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CalendarDays, Users2 } from "lucide-react";
+import { ListOrdered, Users2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const items = [
-  { href: "/admin", label: "Events", icon: CalendarDays },
+  { href: "/admin", label: "Queue", icon: ListOrdered },
   { href: "/admin/staff", label: "Staff", icon: Users2 },
 ];
 
@@ -19,7 +19,7 @@ export function AdminSidebar() {
         {items.map((item) => {
           const active =
             item.href === "/admin"
-              ? pathname === "/admin" || pathname.startsWith("/admin/events")
+              ? pathname === "/admin"
               : pathname.startsWith(item.href);
           return (
             <Link

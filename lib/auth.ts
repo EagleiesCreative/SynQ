@@ -1,6 +1,6 @@
 import { currentUser } from "@clerk/nextjs/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import type { Profile } from "@/lib/database.types";
+import type { Profile, Event } from "@/lib/database.types";
 
 export interface CurrentUser {
   id: string;
@@ -14,10 +14,11 @@ export interface CurrentUser {
  * auth.uid() (there is no Supabase Auth session anymore), so it's done
  * with the service-role client, entirely in application code.
  *
- * Provisioning model (POS-style, multi-tenant): whoever signs in gets their
- * OWN organization and is its admin/owner. Nobody is ever auto-dropped into
- * someone else's organization — joining an existing team is an explicit,
- * opt-in action via a join code (see lib/actions/organization.ts).
+ * Provisioning model (POS-style): whoever signs in gets their OWN
+ * organization with exactly one queue, and is its admin/owner. Nobody is
+ * ever auto-dropped into someone else's organization — joining an existing
+ * team is an explicit, opt-in action via a join code (see
+ * lib/actions/organization.ts).
  */
 export async function getCurrentUserAndProfile(): Promise<{
   user: CurrentUser | null;
@@ -102,15 +103,48 @@ export async function getCurrentUserAndProfile(): Promise<{
       .update({ owner_id: clerkUser.id })
       .eq("id", org.id);
 
-    // Every organization needs its own queue settings row.
+    // Each account runs exactly one queue, created up front so the
+    // dashboard is usable the moment they land on it.
     await admin
-      .from("app_settings")
-      .insert({ organization_id: org.id, is_open: true })
-      .select("organization_id")
+      .from("events")
+      .insert({ organization_id: org.id, name: `${fullName}'s Queue` })
+      .select("id")
       .maybeSingle();
 
     profile = created as Profile;
   }
 
   return { user, profile };
+}
+
+/**
+ * The single queue belonging to `organizationId`, created on demand.
+ *
+ * There is deliberately no UI for creating or deleting queues: one account
+ * owns one queue for its whole life. This exists so accounts that predate
+ * that rule (or whose queue was somehow removed) still resolve to one.
+ */
+export async function getOrCreateEvent(
+  organizationId: string,
+  fallbackName = "My Queue"
+): Promise<Event | null> {
+  if (!organizationId) return null;
+  const admin = createAdminClient();
+
+  const { data: existing } = await admin
+    .from("events")
+    .select("*")
+    .eq("organization_id", organizationId)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (existing) return existing as Event;
+
+  const { data: created } = await admin
+    .from("events")
+    .insert({ organization_id: organizationId, name: fallbackName })
+    .select("*")
+    .maybeSingle();
+
+  return (created as Event) ?? null;
 }

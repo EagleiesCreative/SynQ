@@ -9,32 +9,12 @@ import {
 } from "./guard";
 import type { Event, Ticket } from "@/lib/database.types";
 
-/* ---------------------------------------------------------------- events */
+/* ----------------------------------------------------------------- queue */
 
-export async function createEvent(input: {
-  name: string;
-  description?: string | null;
-}): Promise<string> {
-  const { db, orgId } = await requireAdmin();
-
-  const name = input.name.trim();
-  if (!name) throw new Error("Give the event a name.");
-
-  const { data, error } = await db
-    .from("events")
-    .insert({
-      organization_id: orgId,
-      name,
-      description: input.description?.trim() || null,
-    })
-    .select("id")
-    .single();
-  if (error || !data) throw new Error(error?.message || "Couldn't create the event.");
-
-  revalidatePath("/admin");
-  return data.id as string;
-}
-
+/**
+ * Each account owns exactly one queue, provisioned at sign-in — there is
+ * deliberately no create or delete action here, only settings.
+ */
 export async function updateEvent(
   eventId: string,
   patch: Partial<
@@ -60,21 +40,7 @@ export async function updateEvent(
   if (error) throw new Error(error.message);
 
   revalidatePath("/admin");
-  revalidatePath(`/admin/events/${eventId}`);
 }
-
-export async function deleteEvent(eventId: string) {
-  const { db, orgId } = await requireAdmin();
-  const { error } = await db
-    .from("events")
-    .delete()
-    .eq("id", eventId)
-    .eq("organization_id", orgId);
-  if (error) throw new Error(error.message);
-  revalidatePath("/admin");
-}
-
-/* ----------------------------------------------------------------- queue */
 
 /**
  * Calls the next waiting ticket. Any ticket still sitting in called/serving
@@ -106,7 +72,7 @@ export async function callNext(
 
   if (!next) {
     await db.from("events").update({ current_ticket_id: null }).eq("id", eventId);
-    revalidatePath(`/admin/events/${eventId}`);
+    revalidatePath("/admin");
     return { ok: false, reason: "empty" };
   }
 
@@ -128,7 +94,7 @@ export async function callNext(
     .update({ current_ticket_id: called.id })
     .eq("id", eventId);
 
-  revalidatePath(`/admin/events/${eventId}`);
+  revalidatePath("/admin");
   return { ok: true, ticket: called as Ticket };
 }
 
@@ -181,7 +147,7 @@ export async function skipCurrent(eventId: string) {
     await db.from("events").update({ current_ticket_id: null }).eq("id", eventId);
   }
 
-  revalidatePath(`/admin/events/${eventId}`);
+  revalidatePath("/admin");
 }
 
 /** Puts a skipped ticket back at the end of the waiting line. */
@@ -201,7 +167,7 @@ export async function requeueTicket(ticketId: string) {
     .eq("id", ticketId);
   if (error) throw new Error(error.message);
 
-  revalidatePath(`/admin/events/${eventId}`);
+  revalidatePath("/admin");
 }
 
 /** Hands a number to a walk-up customer who didn't scan the QR. */
@@ -220,7 +186,7 @@ export async function issueWalkInTicket(
   });
   if (error) throw new Error(error.message);
 
-  revalidatePath(`/admin/events/${eventId}`);
+  revalidatePath("/admin");
   return data as Ticket;
 }
 
@@ -233,5 +199,5 @@ export async function resetQueue(eventId: string) {
   await db.from("tickets").delete().eq("event_id", eventId);
   await db.from("events").update({ last_number: 0 }).eq("id", eventId);
 
-  revalidatePath(`/admin/events/${eventId}`);
+  revalidatePath("/admin");
 }
