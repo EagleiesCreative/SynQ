@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentUserAndProfile } from "@/lib/auth";
 import type { Service } from "@/lib/database.types";
 import { CallNextBar } from "@/components/admin/CallNextBar";
 import { LiveQueueTable } from "@/components/admin/LiveQueueTable";
@@ -7,10 +8,13 @@ export const dynamic = "force-dynamic";
 
 export default async function AdminQueuePage() {
   const supabase = await createClient();
+  const { profile } = await getCurrentUserAndProfile();
+  const organizationId = profile?.organization_id || "";
 
   const { data: services } = await supabase
     .from("services")
     .select("*")
+    .eq("organization_id", organizationId)
     .eq("is_active", true)
     .order("sort_order", { ascending: true });
 

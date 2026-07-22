@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentUserAndProfile } from "@/lib/auth";
 import { OverviewCharts } from "@/components/admin/OverviewCharts";
 import { Card, CardContent } from "@/components/ui/Card";
 import { StatCard } from "@/components/ui/StatCard";
@@ -18,24 +19,37 @@ function avgMinutes(pairs: { start: string; end: string | null }[]) {
 
 export default async function AdminOverviewPage() {
   const supabase = await createClient();
+  const { profile } = await getCurrentUserAndProfile();
+  const organizationId = profile?.organization_id || "";
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);
 
-  const [{ data: todayTickets }, { data: services }, { data: counters }] =
-    await Promise.all([
-      supabase
+  const [{ data: services }, { data: counters }] = await Promise.all([
+    supabase
+      .from("services")
+      .select("id, name, color")
+      .eq("organization_id", organizationId)
+      .eq("is_active", true),
+    supabase
+      .from("counters")
+      .select(
+        "id, name, is_active, current_ticket_id, agent:profiles!counters_current_agent_id_fkey(full_name), ticket:tickets!counters_current_ticket_fk(code)"
+      )
+      .eq("organization_id", organizationId),
+  ]);
+
+  // Tickets carry no organization_id of their own — they belong to this org
+  // only via the service they were issued against.
+  const serviceIds = (services || []).map((s) => s.id as string);
+  const { data: todayTickets } = serviceIds.length
+    ? await supabase
         .from("tickets")
         .select(
           "id, status, service_id, created_at, called_at, served_at, finished_at"
         )
-        .gte("created_at", startOfDay.toISOString()),
-      supabase.from("services").select("id, name, color").eq("is_active", true),
-      supabase
-        .from("counters")
-        .select(
-          "id, name, is_active, current_ticket_id, agent:profiles!counters_current_agent_id_fkey(full_name), ticket:tickets!counters_current_ticket_fk(code)"
-        ),
-    ]);
+        .in("service_id", serviceIds)
+        .gte("created_at", startOfDay.toISOString())
+    : { data: [] };
 
   const tickets = todayTickets || [];
   const waitingNow = tickets.filter((t) => t.status === "waiting").length;

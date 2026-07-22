@@ -52,7 +52,13 @@ interface TicketRow {
 
 const STORAGE_KEY = "queue_selected_counter";
 
-export function CounterDashboard({ userId }: { userId: string }) {
+export function CounterDashboard({
+  userId,
+  organizationId,
+}: {
+  userId: string;
+  organizationId: string;
+}) {
   const [counters, setCounters] = useState<CounterRow[]>([]);
   const [selectedCounterId, setSelectedCounterId] = useState<string | null>(
     null
