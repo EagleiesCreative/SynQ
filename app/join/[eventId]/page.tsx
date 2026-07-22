@@ -48,7 +48,11 @@ export default async function JoinEventPage({
       .eq("organization_id", eventId)
       .eq("is_active", true)
       .order("sort_order", { ascending: true }),
-    supabase.from("app_settings").select("*").eq("id", true).single(),
+    supabase
+      .from("app_settings")
+      .select("*")
+      .eq("organization_id", eventId)
+      .maybeSingle(),
   ]);
 
   const serviceIds = (services || []).map((s: Service) => s.id);
@@ -61,7 +65,11 @@ export default async function JoinEventPage({
     : { count: 0 };
 
   const appSettings = settings as AppSettings | null;
-  const closed = !appSettings?.is_open || !isWithinHours(appSettings);
+  // A newly created organization has no settings row until an admin saves
+  // one — treat that as "open" rather than locking customers out.
+  const closed = appSettings
+    ? !appSettings.is_open || !isWithinHours(appSettings)
+    : false;
   const full = Boolean(
     appSettings?.max_queue_size != null &&
       (waitingCount || 0) >= appSettings.max_queue_size

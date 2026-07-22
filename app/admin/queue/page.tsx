@@ -28,7 +28,7 @@ export default async function AdminQueuePage() {
         </p>
       </div>
 
-      <CallNextBar />
+      <CallNextBar organizationId={organizationId} />
       <LiveQueueTable services={(services as Service[]) || []} />
     </div>
   );

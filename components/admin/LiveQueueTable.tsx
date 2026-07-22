@@ -42,7 +42,16 @@ export function LiveQueueTable({ services }: { services: Service[] }) {
   const [sort, setSort] = useState<"longest" | "newest">("longest");
   const [busyId, setBusyId] = useState<string | null>(null);
 
+  // Tickets have no organization_id — scope them to this org's services.
+  const orgServiceIds = useMemo(() => services.map((s) => s.id), [services]);
+
   const load = useCallback(async () => {
+    if (!orgServiceIds.length) {
+      setTickets([]);
+      setLoading(false);
+      return;
+    }
+
     const supabase = createClient();
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
@@ -52,12 +61,13 @@ export function LiveQueueTable({ services }: { services: Service[] }) {
       .select(
         "id, code, status, customer_name, party_size, created_at, service_id, service:services(name,color)"
       )
+      .in("service_id", orgServiceIds)
       .gte("created_at", startOfDay.toISOString())
       .order("created_at", { ascending: true });
 
     setTickets((data as unknown as TicketRow[]) || []);
     setLoading(false);
-  }, []);
+  }, [orgServiceIds]);
 
   useEffect(() => {
     load();

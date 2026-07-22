@@ -10,22 +10,30 @@ export default async function AdminCountersPage() {
   const { profile } = await getCurrentUserAndProfile();
   const organizationId = profile?.organization_id || "";
 
-  const [{ data: counters }, { data: services }, { data: mappings }] =
-    await Promise.all([
-      supabase
-        .from("counters")
-        .select(
-          "id, name, is_active, current_agent_id, agent:profiles!counters_current_agent_id_fkey(full_name)"
-        )
-        .eq("organization_id", organizationId)
-        .order("name", { ascending: true }),
-      supabase
-        .from("services")
-        .select("*")
-        .eq("organization_id", organizationId)
-        .eq("is_active", true),
-      supabase.from("counter_services").select("counter_id, service_id"),
-    ]);
+  const [{ data: counters }, { data: services }] = await Promise.all([
+    supabase
+      .from("counters")
+      .select(
+        "id, name, is_active, current_agent_id, agent:profiles!counters_current_agent_id_fkey(full_name)"
+      )
+      .eq("organization_id", organizationId)
+      .order("name", { ascending: true }),
+    supabase
+      .from("services")
+      .select("*")
+      .eq("organization_id", organizationId)
+      .eq("is_active", true),
+  ]);
+
+  // counter_services has no organization_id of its own — scope it to the
+  // counters we just loaded so other tenants' mappings never reach the client.
+  const counterIds = (counters || []).map((c) => c.id as string);
+  const { data: mappings } = counterIds.length
+    ? await supabase
+        .from("counter_services")
+        .select("counter_id, service_id")
+        .in("counter_id", counterIds)
+    : { data: [] };
 
   return (
     <div className="space-y-6">
