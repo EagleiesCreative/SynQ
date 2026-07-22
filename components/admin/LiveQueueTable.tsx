@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { moveTicketToFront } from "@/lib/actions/tickets";
 import type { Service } from "@/lib/database.types";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Select } from "@/components/ui/Select";
@@ -90,20 +91,7 @@ export function LiveQueueTable({ services }: { services: Service[] }) {
 
   async function moveToFront(ticket: TicketRow) {
     setBusyId(ticket.id);
-    const supabase = createClient();
-    const { data: earliest } = await supabase
-      .from("tickets")
-      .select("created_at")
-      .eq("service_id", ticket.service_id)
-      .eq("status", "waiting")
-      .order("created_at", { ascending: true })
-      .limit(1)
-      .maybeSingle();
-
-    const base = earliest ? new Date(earliest.created_at) : new Date();
-    const bumped = new Date(base.getTime() - 1000).toISOString();
-
-    await supabase.from("tickets").update({ created_at: bumped }).eq("id", ticket.id);
+    await moveTicketToFront(ticket.id, ticket.service_id);
     showToast({ message: `${ticket.code} moved to the front of the line` });
     setBusyId(null);
     load();

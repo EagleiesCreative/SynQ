@@ -1,5 +1,4 @@
 import { createClient } from "@/lib/supabase/server";
-import { getCurrentUserAndProfile } from "@/lib/auth";
 import type { Service } from "@/lib/database.types";
 import { CallNextBar } from "@/components/admin/CallNextBar";
 import { LiveQueueTable } from "@/components/admin/LiveQueueTable";
@@ -8,7 +7,6 @@ export const dynamic = "force-dynamic";
 
 export default async function AdminQueuePage() {
   const supabase = await createClient();
-  const { user } = await getCurrentUserAndProfile();
 
   const { data: services } = await supabase
     .from("services")
@@ -26,7 +24,7 @@ export default async function AdminQueuePage() {
         </p>
       </div>
 
-      <CallNextBar userId={user?.id || ""} />
+      <CallNextBar />
       <LiveQueueTable services={(services as Service[]) || []} />
     </div>
   );

@@ -2,6 +2,13 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import {
+  claimCounter,
+  releaseCounterClaim,
+  callNextTicket,
+  updateTicket,
+  clearCounterTicket,
+} from "@/lib/actions/tickets";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -167,11 +174,7 @@ export function CounterDashboard({ userId }: { userId: string }) {
   }, [selectedCounterId, loadCounterDetails]);
 
   async function selectCounter(counterId: string) {
-    const supabase = createClient();
-    await supabase
-      .from("counters")
-      .update({ current_agent_id: userId })
-      .eq("id", counterId);
+    await claimCounter(counterId);
     localStorage.setItem(STORAGE_KEY, counterId);
     setSelectedCounterId(counterId);
     loadCounters();
@@ -179,11 +182,7 @@ export function CounterDashboard({ userId }: { userId: string }) {
 
   async function releaseCounter() {
     if (!selectedCounterId) return;
-    const supabase = createClient();
-    await supabase
-      .from("counters")
-      .update({ current_agent_id: null })
-      .eq("id", selectedCounterId);
+    await releaseCounterClaim(selectedCounterId);
     localStorage.removeItem(STORAGE_KEY);
     setSelectedCounterId(null);
     setCurrentTicket(null);
@@ -194,37 +193,13 @@ export function CounterDashboard({ userId }: { userId: string }) {
     if (!selectedCounterId || !serviceIds.length) return;
     setBusy(true);
     setNotice(null);
-    const supabase = createClient();
 
-    const { data: nextTicket } = await supabase
-      .from("tickets")
-      .select("id")
-      .in("service_id", serviceIds)
-      .eq("status", "waiting")
-      .order("created_at", { ascending: true })
-      .limit(1)
-      .maybeSingle();
-
-    if (!nextTicket) {
+    const result = await callNextTicket(selectedCounterId);
+    if (!result.ok) {
       setNotice("No one is waiting right now.");
       setBusy(false);
       return;
     }
-
-    await supabase
-      .from("tickets")
-      .update({
-        status: "called",
-        counter_id: selectedCounterId,
-        agent_id: userId,
-        called_at: new Date().toISOString(),
-      })
-      .eq("id", nextTicket.id);
-
-    await supabase
-      .from("counters")
-      .update({ current_ticket_id: nextTicket.id })
-      .eq("id", selectedCounterId);
 
     await loadCounterDetails(selectedCounterId);
     setBusy(false);
@@ -247,11 +222,9 @@ export function CounterDashboard({ userId }: { userId: string }) {
   async function startServing() {
     if (!currentTicket) return;
     setBusy(true);
-    const supabase = createClient();
-    await supabase
-      .from("tickets")
-      .update({ status: "serving", served_at: new Date().toISOString() })
-      .eq("id", currentTicket.id);
+    await updateTicket(currentTicket.id, "serving", {
+      served_at: new Date().toISOString(),
+    });
     if (selectedCounterId) await loadCounterDetails(selectedCounterId);
     setBusy(false);
   }
@@ -259,15 +232,10 @@ export function CounterDashboard({ userId }: { userId: string }) {
   async function finishTicket() {
     if (!currentTicket || !selectedCounterId) return;
     setBusy(true);
-    const supabase = createClient();
-    await supabase
-      .from("tickets")
-      .update({ status: "served", finished_at: new Date().toISOString() })
-      .eq("id", currentTicket.id);
-    await supabase
-      .from("counters")
-      .update({ current_ticket_id: null })
-      .eq("id", selectedCounterId);
+    await updateTicket(currentTicket.id, "served", {
+      finished_at: new Date().toISOString(),
+    });
+    await clearCounterTicket(selectedCounterId);
     await loadCounterDetails(selectedCounterId);
     setBusy(false);
   }
@@ -275,19 +243,11 @@ export function CounterDashboard({ userId }: { userId: string }) {
   async function skipTicket() {
     if (!currentTicket || !selectedCounterId) return;
     setBusy(true);
-    const supabase = createClient();
-    await supabase
-      .from("tickets")
-      .update({
-        status: "skipped",
-        finished_at: new Date().toISOString(),
-        skip_count: (currentTicket.skip_count || 0) + 1,
-      })
-      .eq("id", currentTicket.id);
-    await supabase
-      .from("counters")
-      .update({ current_ticket_id: null })
-      .eq("id", selectedCounterId);
+    await updateTicket(currentTicket.id, "skipped", {
+      finished_at: new Date().toISOString(),
+      skip_count: (currentTicket.skip_count || 0) + 1,
+    });
+    await clearCounterTicket(selectedCounterId);
     await loadCounterDetails(selectedCounterId);
     setBusy(false);
   }
@@ -295,11 +255,9 @@ export function CounterDashboard({ userId }: { userId: string }) {
   async function recall() {
     if (!currentTicket) return;
     setBusy(true);
-    const supabase = createClient();
-    await supabase
-      .from("tickets")
-      .update({ called_at: new Date().toISOString() })
-      .eq("id", currentTicket.id);
+    await updateTicket(currentTicket.id, "called", {
+      called_at: new Date().toISOString(),
+    });
     setBusy(false);
   }
 

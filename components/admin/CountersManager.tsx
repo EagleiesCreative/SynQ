@@ -2,6 +2,13 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import {
+  addCounter as addCounterAction,
+  toggleCounterActive,
+  deleteCounter as deleteCounterAction,
+  restoreCounter,
+  setCounterService,
+} from "@/lib/actions/counters";
 import type { Service } from "@/lib/database.types";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -64,40 +71,26 @@ export function CountersManager({
   async function addCounter() {
     if (!newName.trim()) return;
     setBusy(true);
-    const supabase = createClient();
-    const { data } = await supabase
-      .from("counters")
-      .insert({ name: newName.trim(), organization_id: organizationId })
-      .select()
-      .single();
-    if (data) {
-      // by default, link to all active services
-      await supabase.from("counter_services").insert(
-        services.map((s) => ({ counter_id: data.id, service_id: s.id }))
-      );
-    }
+    const serviceIds = services.map((s) => s.id);
+    const id = await addCounterAction(newName.trim(), organizationId, serviceIds);
     setNewName("");
     await refresh();
     setServiceMap((prev) => ({
       ...prev,
-      [data.id]: new Set(services.map((s) => s.id)),
+      [id]: new Set(serviceIds),
     }));
     setBusy(false);
   }
 
   async function toggleActive(c: CounterRow) {
-    const supabase = createClient();
     const nextActive = !c.is_active;
-    await supabase.from("counters").update({ is_active: nextActive }).eq("id", c.id);
+    await toggleCounterActive(c.id, nextActive);
     await refresh();
     showToast({
       message: `${c.name} ${nextActive ? "activated" : "deactivated"}`,
       actionLabel: "Undo",
       onAction: async () => {
-        await supabase
-          .from("counters")
-          .update({ is_active: !nextActive })
-          .eq("id", c.id);
+        await toggleCounterActive(c.id, !nextActive);
         refresh();
       },
     });
@@ -106,10 +99,9 @@ export function CountersManager({
   async function deleteCounter() {
     if (!deleteTarget) return;
     setDeleting(true);
-    const supabase = createClient();
     const removed = deleteTarget;
     const linkedServiceIds = Array.from(serviceMap[removed.id] || []);
-    await supabase.from("counters").delete().eq("id", removed.id);
+    await deleteCounterAction(removed.id);
     setDeleteTarget(null);
     setDeleting(false);
     await refresh();
@@ -117,45 +109,25 @@ export function CountersManager({
       message: `${removed.name} deleted`,
       actionLabel: "Undo",
       onAction: async () => {
-        const { data } = await supabase
-          .from("counters")
-          .insert({
+        await restoreCounter(
+          {
             id: removed.id,
             name: removed.name,
             is_active: removed.is_active,
-            organization_id: organizationId,
-          })
-          .select()
-          .single();
-        if (data && linkedServiceIds.length) {
-          await supabase.from("counter_services").insert(
-            linkedServiceIds.map((serviceId) => ({
-              counter_id: data.id,
-              service_id: serviceId,
-            }))
-          );
-        }
+            organizationId,
+          },
+          linkedServiceIds
+        );
         refresh();
       },
     });
   }
 
   async function toggleService(counterId: string, serviceId: string) {
-    const supabase = createClient();
     const current = serviceMap[counterId] || new Set();
     const has = current.has(serviceId);
 
-    if (has) {
-      await supabase
-        .from("counter_services")
-        .delete()
-        .eq("counter_id", counterId)
-        .eq("service_id", serviceId);
-    } else {
-      await supabase
-        .from("counter_services")
-        .insert({ counter_id: counterId, service_id: serviceId });
-    }
+    await setCounterService(counterId, serviceId, !has);
 
     setServiceMap((prev) => {
       const next = new Set(prev[counterId] || []);

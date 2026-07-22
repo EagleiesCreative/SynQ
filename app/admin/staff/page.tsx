@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import type { Profile } from "@/lib/database.types";
 import { StaffManager } from "@/components/admin/StaffManager";
@@ -20,9 +21,9 @@ export default async function AdminStaffPage() {
         <p className="text-sm text-slate-500">
           Manage staff accounts and permissions. New accounts can be created
           from the{" "}
-          <a href="/login?mode=signup" className="text-brand-600 hover:underline">
+          <Link href="/register" className="text-brand-600 hover:underline">
             sign up page
-          </a>
+          </Link>
           .
         </p>
       </div>

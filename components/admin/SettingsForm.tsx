@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { updateSettings } from "@/lib/actions/settings";
 import type { AppSettings } from "@/lib/database.types";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -16,23 +16,19 @@ export function SettingsForm({ initialSettings }: { initialSettings: AppSettings
 
   async function save() {
     setSaving(true);
-    const supabase = createClient();
-    const { error } = await supabase
-      .from("app_settings")
-      .update({
+    try {
+      await updateSettings({
         is_open: settings.is_open,
         opens_at: settings.opens_at || null,
         closes_at: settings.closes_at || null,
         max_queue_size: settings.max_queue_size,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", true);
-    setSaving(false);
-    if (error) {
+      });
+      showToast({ message: "Settings saved" });
+    } catch {
       showToast({ message: "Couldn't save settings. Try again." });
-      return;
+    } finally {
+      setSaving(false);
     }
-    showToast({ message: "Settings saved" });
   }
 
   return (

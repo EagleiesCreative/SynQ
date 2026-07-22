@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { setStaffRole } from "@/lib/actions/staff";
 import type { Profile } from "@/lib/database.types";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -19,9 +19,8 @@ export function StaffManager({
 
   async function toggleRole(p: Profile) {
     setBusy(p.id);
-    const supabase = createClient();
     const newRole = p.role === "admin" ? "agent" : "admin";
-    await supabase.from("profiles").update({ role: newRole }).eq("id", p.id);
+    await setStaffRole(p.id, newRole);
     setStaff((prev) =>
       prev.map((s) => (s.id === p.id ? { ...s, role: newRole } : s))
     );

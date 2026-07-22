@@ -1,7 +1,5 @@
 import Link from "next/link";
-import { signOut } from "@/app/login/actions";
-import { Button } from "@/components/ui/Button";
-import { LogOut } from "lucide-react";
+import { UserButton } from "@clerk/nextjs";
 
 export function StaffHeader({
   title,
@@ -42,11 +40,7 @@ export function StaffHeader({
           <span className="text-sm text-slate-500 hidden sm:inline">
             {fullName}
           </span>
-          <form action={signOut}>
-            <Button type="submit" variant="outline" size="sm">
-              <LogOut size={14} /> Sign out
-            </Button>
-          </form>
+          <UserButton />
         </div>
       </div>
     </header>

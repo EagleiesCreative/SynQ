@@ -2,6 +2,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import {
+  callNextTicket,
+  updateTicket as updateTicketAction,
+  clearCounterTicket,
+} from "@/lib/actions/tickets";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Select";
@@ -25,10 +30,8 @@ interface CurrentTicket {
 }
 
 export function CallNextBar({
-  userId,
   onChange,
 }: {
-  userId: string;
   onChange?: () => void;
 }) {
   const showToast = useToast();
@@ -82,54 +85,23 @@ export function CallNextBar({
   const callNext = useCallback(async () => {
     if (!counterId || busy) return;
     setBusy(true);
-    const supabase = createClient();
 
-    const { data: services } = await supabase
-      .from("counter_services")
-      .select("service_id")
-      .eq("counter_id", counterId);
-    const serviceIds = (services || []).map((s) => s.service_id);
-
-    if (!serviceIds.length) {
-      showToast({ message: "This counter isn't linked to any services." });
+    const result = await callNextTicket(counterId);
+    if (!result.ok) {
+      showToast({
+        message:
+          result.reason === "no-services"
+            ? "This counter isn't linked to any services."
+            : "No one is waiting right now.",
+      });
       setBusy(false);
       return;
     }
-
-    const { data: nextTicket } = await supabase
-      .from("tickets")
-      .select("id")
-      .in("service_id", serviceIds)
-      .eq("status", "waiting")
-      .order("created_at", { ascending: true })
-      .limit(1)
-      .maybeSingle();
-
-    if (!nextTicket) {
-      showToast({ message: "No one is waiting right now." });
-      setBusy(false);
-      return;
-    }
-
-    await supabase
-      .from("tickets")
-      .update({
-        status: "called",
-        counter_id: counterId,
-        agent_id: userId,
-        called_at: new Date().toISOString(),
-      })
-      .eq("id", nextTicket.id);
-
-    await supabase
-      .from("counters")
-      .update({ current_ticket_id: nextTicket.id })
-      .eq("id", counterId);
 
     await loadTicket(counterId);
     onChange?.();
     setBusy(false);
-  }, [counterId, busy, userId, loadTicket, onChange, showToast]);
+  }, [counterId, busy, loadTicket, onChange, showToast]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -148,13 +120,13 @@ export function CallNextBar({
   async function updateTicket(status: string, extra: Record<string, unknown> = {}) {
     if (!ticket) return;
     setBusy(true);
-    const supabase = createClient();
-    await supabase.from("tickets").update({ status, ...extra }).eq("id", ticket.id);
+    await updateTicketAction(
+      ticket.id,
+      status as "called" | "serving" | "served" | "skipped",
+      extra as Record<string, string | number | null>
+    );
     if (status === "served" || status === "skipped") {
-      await supabase
-        .from("counters")
-        .update({ current_ticket_id: null })
-        .eq("id", counterId);
+      await clearCounterTicket(counterId);
     }
     await loadTicket(counterId);
     onChange?.();

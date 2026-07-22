@@ -2,6 +2,13 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import {
+  addService as addServiceAction,
+  toggleServiceActive,
+  updateService,
+  deleteService as deleteServiceAction,
+  restoreService,
+} from "@/lib/actions/services";
 import type { Service } from "@/lib/database.types";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -55,14 +62,13 @@ export function ServicesManager({
   async function addService() {
     if (!form.name || !form.code) return;
     setBusy(true);
-    const supabase = createClient();
-    await supabase.from("services").insert({
+    await addServiceAction({
       name: form.name,
       code: form.code.toUpperCase(),
       description: form.description || null,
       color: form.color,
-      sort_order: services.length,
-      organization_id: organizationId,
+      sortOrder: services.length,
+      organizationId,
     });
     setForm({ name: "", code: "", description: "", color: COLOR_OPTIONS[0] });
     setShowAdd(false);
@@ -71,18 +77,14 @@ export function ServicesManager({
   }
 
   async function toggleActive(s: Service) {
-    const supabase = createClient();
     const nextActive = !s.is_active;
-    await supabase.from("services").update({ is_active: nextActive }).eq("id", s.id);
+    await toggleServiceActive(s.id, nextActive);
     await refresh();
     showToast({
       message: `${s.name} ${nextActive ? "activated" : "deactivated"}`,
       actionLabel: "Undo",
       onAction: async () => {
-        await supabase
-          .from("services")
-          .update({ is_active: !nextActive })
-          .eq("id", s.id);
+        await toggleServiceActive(s.id, !nextActive);
         refresh();
       },
     });
@@ -91,9 +93,8 @@ export function ServicesManager({
   async function deleteService() {
     if (!deleteTarget) return;
     setDeleting(true);
-    const supabase = createClient();
     const removed = deleteTarget;
-    await supabase.from("services").delete().eq("id", removed.id);
+    await deleteServiceAction(removed.id);
     setDeleteTarget(null);
     setDeleting(false);
     await refresh();
@@ -101,7 +102,7 @@ export function ServicesManager({
       message: `${removed.name} deleted`,
       actionLabel: "Undo",
       onAction: async () => {
-        await supabase.from("services").insert(removed);
+        await restoreService(removed);
         refresh();
       },
     });
@@ -109,16 +110,13 @@ export function ServicesManager({
 
   async function saveEdit(s: Service) {
     setBusy(true);
-    const supabase = createClient();
-    await supabase
-      .from("services")
-      .update({
-        name: s.name,
-        code: s.code.toUpperCase(),
-        description: s.description,
-        color: s.color,
-      })
-      .eq("id", s.id);
+    await updateService({
+      id: s.id,
+      name: s.name,
+      code: s.code.toUpperCase(),
+      description: s.description,
+      color: s.color,
+    });
     setEditingId(null);
     await refresh();
     setBusy(false);
