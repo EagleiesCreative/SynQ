@@ -8,6 +8,7 @@ import {
   assertTicketInOrg,
 } from "./guard";
 import type { Event, Ticket } from "@/lib/database.types";
+import { notifyTicket, notifyAlmostUp } from "@/lib/whatsapp/notify";
 
 /* ----------------------------------------------------------------- queue */
 
@@ -52,6 +53,13 @@ export async function callNext(
   const { userId, db, orgId } = await requireStaff();
   await assertEventInOrg(db, eventId, orgId);
 
+  const { data: eventRow } = await db
+    .from("events")
+    .select("*")
+    .eq("id", eventId)
+    .maybeSingle();
+  const event = eventRow as Event | null;
+
   const now = new Date().toISOString();
 
   // Close out whoever is currently up.
@@ -93,6 +101,18 @@ export async function callNext(
     .from("events")
     .update({ current_ticket_id: called.id })
     .eq("id", eventId);
+
+  if (event) {
+    // Tell this person they're up, and warn whoever is now near the front.
+    await notifyTicket({
+      kind: "called",
+      ticket: called as Ticket,
+      event,
+      organizationId: orgId,
+      db,
+    });
+    await notifyAlmostUp({ event, organizationId: orgId, db });
+  }
 
   revalidatePath("/admin");
   return { ok: true, ticket: called as Ticket };
@@ -174,7 +194,8 @@ export async function requeueTicket(ticketId: string) {
 export async function issueWalkInTicket(
   eventId: string,
   customerName?: string,
-  partySize = 1
+  partySize = 1,
+  customerPhone?: string
 ): Promise<Ticket> {
   const { db, orgId } = await requireStaff();
   await assertEventInOrg(db, eventId, orgId);
@@ -183,11 +204,29 @@ export async function issueWalkInTicket(
     p_event_id: eventId,
     p_customer_name: customerName?.trim() || null,
     p_party_size: partySize,
+    p_customer_phone: customerPhone?.trim() || null,
   });
   if (error) throw new Error(error.message);
 
+  const ticket = data as Ticket;
+
+  const { data: eventRow } = await db
+    .from("events")
+    .select("*")
+    .eq("id", eventId)
+    .maybeSingle();
+  if (eventRow) {
+    await notifyTicket({
+      kind: "joined",
+      ticket,
+      event: eventRow as Event,
+      organizationId: orgId,
+      db,
+    });
+  }
+
   revalidatePath("/admin");
-  return data as Ticket;
+  return ticket;
 }
 
 /** Clears the queue so the event can start over (numbers restart at 1). */

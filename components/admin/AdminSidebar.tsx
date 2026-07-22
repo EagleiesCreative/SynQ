@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ListOrdered, Users2 } from "lucide-react";
+import { ListOrdered, Users2, MessageCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const items = [
   { href: "/admin", label: "Queue", icon: ListOrdered },
+  { href: "/admin/whatsapp", label: "WhatsApp", icon: MessageCircle },
   { href: "/admin/staff", label: "Staff", icon: Users2 },
 ];
 

@@ -26,6 +26,7 @@ export function JoinFlow({
 }) {
   const router = useRouter();
   const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
   const [partySize, setPartySize] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -71,6 +72,7 @@ export function JoinFlow({
         p_event_id: eventId,
         p_customer_name: name || null,
         p_party_size: partySize,
+        p_customer_phone: phone || null,
       });
       if (rpcError) throw rpcError;
 
@@ -129,6 +131,25 @@ export function JoinFlow({
             className="rounded-xl border-slate-200 py-3 font-medium text-slate-800 focus:border-brand-500 focus:ring-brand-500/20"
             autoFocus
           />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="phone" className="text-sm font-semibold text-slate-700">
+            WhatsApp number{" "}
+            <span className="text-xs font-normal text-slate-400">(optional)</span>
+          </Label>
+          <Input
+            id="phone"
+            type="tel"
+            inputMode="tel"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            placeholder="+62 812 3456 7890"
+            className="rounded-xl border-slate-200 py-3 font-medium text-slate-800 focus:border-brand-500 focus:ring-brand-500/20"
+          />
+          <p className="text-xs text-slate-400">
+            We&apos;ll message you when your number is nearly up.
+          </p>
         </div>
 
         <div className="space-y-2">

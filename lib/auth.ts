@@ -60,13 +60,22 @@ export async function getCurrentUserAndProfile(): Promise<{
       .maybeSingle();
 
     if (existing) {
-      const { data: relinked } = await admin
+      const { data: relinked, error: relinkError } = await admin
         .from("profiles")
         .update({ id: clerkUser.id, full_name: fullName })
         .eq("id", existing.id)
         .select("*")
         .maybeSingle();
-      profile = (relinked as Profile | null) ?? { ...existing, id: clerkUser.id };
+
+      if (relinkError || !relinked) {
+        // Keep the row's REAL id. Previously this fabricated a profile
+        // claiming the Clerk id, which then failed every foreign key that
+        // references profiles(id) — e.g. tickets.agent_id on "Next".
+        console.error("[auth] failed to re-link profile to Clerk id:", relinkError);
+        profile = existing as Profile;
+      } else {
+        profile = relinked as Profile;
+      }
     }
   }
 

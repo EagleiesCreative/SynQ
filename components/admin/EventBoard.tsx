@@ -13,6 +13,7 @@ import {
 import type { Event, Ticket } from "@/lib/database.types";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { Input, Label } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
 import { useToast } from "@/components/ui/Toast";
 import { formatWaitDuration } from "@/lib/utils";
@@ -43,6 +44,9 @@ export function EventBoard({
   const [skipped, setSkipped] = useState<Ticket[]>(initialSkipped);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [walkIn, setWalkIn] = useState<{ name: string; phone: string } | null>(
+    null
+  );
 
   const refresh = useCallback(async () => {
     const supabase = createClient();
@@ -209,12 +213,7 @@ export function EventBoard({
               size="sm"
               className="gap-1.5"
               disabled={busy}
-              onClick={() =>
-                run(async () => {
-                  const t = await issueWalkInTicket(event.id);
-                  showToast({ message: `Issued ${t.code}` });
-                })
-              }
+              onClick={() => setWalkIn({ name: "", phone: "" })}
             >
               <UserPlus size={14} /> Walk-up number
             </Button>
@@ -237,6 +236,53 @@ export function EventBoard({
           </div>
         </CardContent>
       </Card>
+
+      {/* Walk-up: capture a phone so they can be messaged like QR joiners */}
+      {walkIn && (
+        <Card>
+          <CardContent className="pt-6">
+            <form
+              className="flex flex-wrap items-end gap-3"
+              onSubmit={(e) => {
+                e.preventDefault();
+                const { name, phone } = walkIn;
+                setWalkIn(null);
+                run(async () => {
+                  const t = await issueWalkInTicket(event.id, name, 1, phone);
+                  showToast({ message: `Issued ${t.code}` });
+                });
+              }}
+            >
+              <div className="flex-1 min-w-[160px]">
+                <Label htmlFor="walkin-name">Name (optional)</Label>
+                <Input
+                  id="walkin-name"
+                  autoFocus
+                  value={walkIn.name}
+                  onChange={(e) => setWalkIn({ ...walkIn, name: e.target.value })}
+                  placeholder="Guest"
+                />
+              </div>
+              <div className="flex-1 min-w-[160px]">
+                <Label htmlFor="walkin-phone">WhatsApp (optional)</Label>
+                <Input
+                  id="walkin-phone"
+                  type="tel"
+                  value={walkIn.phone}
+                  onChange={(e) => setWalkIn({ ...walkIn, phone: e.target.value })}
+                  placeholder="+62 812 3456 7890"
+                />
+              </div>
+              <Button type="submit" disabled={busy}>
+                Issue number
+              </Button>
+              <Button type="button" variant="ghost" onClick={() => setWalkIn(null)}>
+                Cancel
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Waiting line */}
       <Card>
