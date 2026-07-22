@@ -82,11 +82,12 @@ export function CounterDashboard({
     const { data } = await supabase
       .from("counters")
       .select("id, name, current_ticket_id, current_agent_id")
+      .eq("organization_id", organizationId)
       .eq("is_active", true)
       .order("name", { ascending: true });
     setCounters((data as CounterRow[]) || []);
     setLoadingCounters(false);
-  }, []);
+  }, [organizationId]);
 
   const loadCounterDetails = useCallback(async (counterId: string) => {
     const supabase = createClient();

@@ -31,8 +31,10 @@ interface CurrentTicket {
 
 export function CallNextBar({
   onChange,
+  organizationId,
 }: {
   onChange?: () => void;
+  organizationId: string;
 }) {
   const showToast = useToast();
   const [counters, setCounters] = useState<CounterOption[]>([]);
@@ -45,11 +47,12 @@ export function CallNextBar({
     const { data } = await supabase
       .from("counters")
       .select("id, name")
+      .eq("organization_id", organizationId)
       .eq("is_active", true)
       .order("name", { ascending: true });
     setCounters(data || []);
     setCounterId((prev) => prev || data?.[0]?.id || "");
-  }, []);
+  }, [organizationId]);
 
   const loadTicket = useCallback(async (id: string) => {
     if (!id) {

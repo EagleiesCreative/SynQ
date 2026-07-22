@@ -20,7 +20,10 @@ export default async function CounterPage() {
             : undefined
         }
       />
-      <CounterDashboard userId={user.id} />
+      <CounterDashboard
+        userId={user.id}
+        organizationId={profile?.organization_id || ""}
+      />
     </div>
   );
 }
