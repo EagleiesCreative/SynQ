@@ -55,7 +55,7 @@ export async function sendAisensyCampaign(
 ): Promise<SendResult> {
   const apiKey = getAisensyApiKey();
   if (!apiKey) {
-    return { ok: false, error: "AISENSY_API_KEY is not set on the server." };
+    return { ok: false, error: "Messaging is not configured." };
   }
 
   try {

@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 
 const items = [
   { href: "/admin", label: "Queue", icon: ListOrdered },
-  { href: "/admin/whatsapp", label: "WhatsApp", icon: MessageCircle },
+  { href: "/admin/whatsapp", label: "Notifications", icon: MessageCircle },
   { href: "/admin/staff", label: "Staff", icon: Users2 },
 ];
 

@@ -37,11 +37,10 @@ export default async function WhatsappPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-semibold text-slate-900">WhatsApp</h1>
+        <h1 className="text-xl font-semibold text-slate-900">Notifications</h1>
         <p className="text-sm text-slate-500">
-          Notify people on WhatsApp through AiSensy when they join the queue,
-          get close to the front, and when their number is called. The API key
-          is read from the server environment, not stored here.
+          Message people on WhatsApp as they move up the queue, so they can
+          step away and still make it back in time.
         </p>
       </div>
       <WhatsappSettingsForm initial={initial} />

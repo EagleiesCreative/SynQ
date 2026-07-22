@@ -3,12 +3,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Ticket } from "@/lib/database.types";
+import { Wifi, WifiOff } from "lucide-react";
 
 /**
- * Full-screen TV board for a single event queue.
+ * Full-screen TV board for a single queue.
  *
  * Layout: the number being served fills the centre, the next few numbers
- * ride a carousel down the right, and the event name plus a live clock sit
+ * ride a carousel down the right, and the queue name plus a live clock sit
  * along the top.
  */
 export function DisplayBoard({
@@ -23,6 +24,7 @@ export function DisplayBoard({
   const [waitingTotal, setWaitingTotal] = useState(0);
   const [now, setNow] = useState<Date | null>(null);
   const [flash, setFlash] = useState(false);
+  const [live, setLive] = useState(false);
   const lastAnnounced = useRef<string | null>(null);
 
   // Clock. Rendered only after mount so server/client markup can't disagree.
@@ -55,7 +57,9 @@ export function DisplayBoard({
 
     setCurrent(serving);
     setUpcoming(waiting.slice(0, 4));
-    setWaitingTotal(count ? Math.max(waiting.length, count - (serving ? 1 : 0)) : waiting.length);
+    setWaitingTotal(
+      count ? Math.max(waiting.length, count - (serving ? 1 : 0)) : waiting.length
+    );
 
     // Pulse whenever a different number comes up (or the same one is recalled).
     const stamp = serving ? `${serving.id}:${serving.called_at ?? ""}` : null;
@@ -71,45 +75,83 @@ export function DisplayBoard({
     const supabase = createClient();
     const channel = supabase
       .channel(`display-${eventId}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "tickets" }, load)
-      .on("postgres_changes", { event: "*", schema: "public", table: "events" }, load)
-      .subscribe();
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "tickets",
+          filter: `event_id=eq.${eventId}`,
+        },
+        load
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "events",
+          filter: `id=eq.${eventId}`,
+        },
+        load
+      )
+      .subscribe((status) => setLive(status === "SUBSCRIBED"));
 
-    // Safety net in case the realtime socket drops on a TV left running.
-    const poll = setInterval(load, 15000);
+    // Safety net for a TV left running for days on a flaky connection.
+    const poll = setInterval(load, 20000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") load();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+
     return () => {
       supabase.removeChannel(channel);
       clearInterval(poll);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, [eventId, load]);
 
   return (
-    <main className="flex min-h-screen flex-col bg-slate-950 text-white">
-      {/* Header: event name + clock */}
-      <header className="flex items-center justify-between border-b border-white/10 px-10 py-6">
+    <main className="flex min-h-screen flex-col bg-slate-50 text-slate-900">
+      {/* Header: queue name + clock */}
+      <header className="flex items-center justify-between border-b border-slate-200 bg-white px-10 py-6">
         <div className="flex items-center gap-4">
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-brand-600 text-lg font-bold">
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-brand-600 text-lg font-semibold text-white">
             S
           </div>
           <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
             {eventName}
           </h1>
         </div>
-        <div className="text-right">
-          <p className="text-3xl font-semibold tabular-nums sm:text-4xl">
-            {now
-              ? now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-              : "--:--"}
-          </p>
-          <p className="text-sm text-white/40">
-            {now
-              ? now.toLocaleDateString([], {
-                  weekday: "long",
-                  day: "numeric",
-                  month: "long",
-                })
-              : ""}
-          </p>
+        <div className="flex items-center gap-6">
+          <span
+            className={`inline-flex items-center gap-1.5 text-sm font-medium ${
+              live ? "text-emerald-600" : "text-slate-400"
+            }`}
+          >
+            {live ? (
+              <Wifi size={15} aria-hidden="true" />
+            ) : (
+              <WifiOff size={15} aria-hidden="true" />
+            )}
+            {live ? "Live" : "Reconnecting"}
+          </span>
+          <div className="text-right">
+            <p className="text-3xl font-semibold tabular-nums sm:text-4xl">
+              {now
+                ? now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                : "--:--"}
+            </p>
+            <p className="text-sm text-slate-500">
+              {now
+                ? now.toLocaleDateString([], {
+                    weekday: "long",
+                    day: "numeric",
+                    month: "long",
+                  })
+                : ""}
+            </p>
+          </div>
         </div>
       </header>
 
@@ -119,27 +161,27 @@ export function DisplayBoard({
           <div
             className={`w-full max-w-3xl rounded-[2rem] border p-14 text-center transition-all duration-500 ${
               flash
-                ? "scale-[1.02] border-brand-400 bg-brand-600/20 shadow-[0_0_90px_-10px] shadow-brand-500/60"
-                : "border-white/10 bg-white/5"
+                ? "scale-[1.02] border-brand-400 bg-brand-50 shadow-[0_20px_60px_-25px] shadow-brand-500/40"
+                : "border-slate-200 bg-white shadow-soft"
             }`}
           >
-            <p className="text-lg font-medium uppercase tracking-[0.3em] text-brand-300">
+            <p className="text-lg font-semibold uppercase tracking-[0.3em] text-brand-600">
               Now serving
             </p>
             <p
               className={`mt-6 font-bold leading-none tabular-nums ${
                 current
-                  ? "text-[8rem] sm:text-[11rem] lg:text-[13rem]"
-                  : "text-[6rem] text-white/25"
-              } ${flash ? "animate-pulse" : ""}`}
+                  ? "text-[8rem] text-slate-900 sm:text-[11rem] lg:text-[13rem]"
+                  : "text-[6rem] text-slate-300"
+              }`}
             >
               {current?.code || "—"}
             </p>
             {current?.customer_name && (
-              <p className="mt-6 text-3xl text-white/70">{current.customer_name}</p>
+              <p className="mt-6 text-3xl text-slate-600">{current.customer_name}</p>
             )}
             {!current && (
-              <p className="mt-6 text-2xl text-white/40">
+              <p className="mt-6 text-2xl text-slate-400">
                 Please wait for the next number
               </p>
             )}
@@ -148,7 +190,7 @@ export function DisplayBoard({
 
         {/* Upcoming carousel */}
         <aside className="flex flex-col">
-          <p className="mb-5 text-sm font-medium uppercase tracking-[0.25em] text-white/40">
+          <p className="mb-5 text-sm font-semibold uppercase tracking-[0.25em] text-slate-500">
             Up next
           </p>
           <div className="flex-1 space-y-4 overflow-hidden">
@@ -158,13 +200,13 @@ export function DisplayBoard({
                 style={{ animationDelay: `${i * 90}ms` }}
                 className={`animate-[slideUp_0.5s_ease-out_both] rounded-2xl border px-7 py-6 ${
                   i === 0
-                    ? "border-brand-400/40 bg-white/10"
-                    : "border-white/10 bg-white/[0.03]"
+                    ? "border-brand-200 bg-white shadow-soft"
+                    : "border-slate-200 bg-white/70"
                 }`}
               >
                 <p
                   className={`font-bold leading-none tabular-nums ${
-                    i === 0 ? "text-6xl text-white" : "text-4xl text-white/55"
+                    i === 0 ? "text-6xl text-slate-900" : "text-4xl text-slate-500"
                   }`}
                 >
                   {t.code}
@@ -172,7 +214,7 @@ export function DisplayBoard({
                 {t.customer_name && (
                   <p
                     className={`mt-2 truncate ${
-                      i === 0 ? "text-lg text-white/60" : "text-sm text-white/35"
+                      i === 0 ? "text-lg text-slate-600" : "text-sm text-slate-400"
                     }`}
                   >
                     {t.customer_name}
@@ -182,15 +224,17 @@ export function DisplayBoard({
             ))}
 
             {upcoming.length === 0 && (
-              <div className="rounded-2xl border border-dashed border-white/10 px-7 py-10 text-center text-white/30">
+              <div className="rounded-2xl border border-dashed border-slate-300 bg-white/60 px-7 py-10 text-center text-slate-400">
                 Nobody waiting
               </div>
             )}
           </div>
 
           {waitingTotal > 0 && (
-            <p className="mt-6 text-center text-sm text-white/30">
-              {waitingTotal === 1 ? "1 person waiting" : `${waitingTotal} people waiting`}
+            <p className="mt-6 text-center text-sm text-slate-500">
+              {waitingTotal === 1
+                ? "1 person waiting"
+                : `${waitingTotal} people waiting`}
             </p>
           )}
         </aside>
@@ -205,6 +249,11 @@ export function DisplayBoard({
           to {
             opacity: 1;
             transform: translateY(0);
+          }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .animate-\\[slideUp_0\\.5s_ease-out_both\\] {
+            animation: none;
           }
         }
       `}</style>

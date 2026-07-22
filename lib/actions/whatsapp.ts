@@ -56,7 +56,7 @@ export async function saveWhatsappSettings(input: WhatsappSettingsInput) {
 
   if (patch.enabled === true && !getAisensyApiKey()) {
     throw new Error(
-      "AISENSY_API_KEY isn't set on the server. Add it to your environment variables and redeploy."
+      "Messaging isn't connected yet, so notifications can't be switched on."
     );
   }
 
@@ -73,7 +73,7 @@ export async function sendWhatsappTest(phone: string) {
   const { db, orgId } = await requireAdmin();
 
   if (!getAisensyApiKey()) {
-    throw new Error("AISENSY_API_KEY isn't set on the server.");
+    throw new Error("Messaging isn't connected yet.");
   }
 
   const destination = normalisePhone(phone);
@@ -93,7 +93,7 @@ export async function sendWhatsappTest(phone: string) {
     settings?.campaign_joined ||
     settings?.campaign_almost_up;
   if (!campaignName) {
-    throw new Error("Set at least one campaign name first.");
+    throw new Error("Add at least one message name first.");
   }
 
   const result = await sendAisensyCampaign({
@@ -103,6 +103,8 @@ export async function sendWhatsappTest(phone: string) {
     templateParams: ["there", "001", "Test queue", "0"],
   });
 
-  if (!result.ok) throw new Error(result.error || "AiSensy rejected the message.");
+  if (!result.ok) {
+    throw new Error("That message couldn't be sent. Check the message name and try again.");
+  }
   return { destination };
 }

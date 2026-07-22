@@ -10,7 +10,7 @@ import { AlertCircle, Check, Send } from "lucide-react";
 
 export interface WhatsappSettingsView {
   enabled: boolean;
-  /** Whether AISENSY_API_KEY is present in the server environment. */
+  /** Whether messaging is set up on the server. */
   keyConfigured: boolean;
   campaign_joined: string;
   campaign_almost_up: string;
@@ -82,8 +82,11 @@ export function WhatsappSettingsForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
       {error && (
-        <div className="flex items-start gap-2 rounded-xl bg-rose-50 px-3.5 py-3 text-sm text-rose-700">
-          <AlertCircle size={16} className="mt-0.5 shrink-0" />
+        <div
+          role="alert"
+          className="flex items-start gap-2 rounded-xl bg-rose-50 px-3.5 py-3 text-sm text-rose-700"
+        >
+          <AlertCircle size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
           <span>{error}</span>
         </div>
       )}
@@ -97,36 +100,37 @@ export function WhatsappSettingsForm({
         <CardContent className="space-y-4 pt-6">
           <div className="flex items-center justify-between gap-4">
             <div>
-              <h2 className="text-sm font-semibold text-slate-900">Connection</h2>
+              <h2 className="text-sm font-semibold text-slate-900">
+                Automatic messages
+              </h2>
               <p className="mt-0.5 text-sm text-slate-500">
-                The AiSensy key is read from the{" "}
-                <code className="text-slate-700">AISENSY_API_KEY</code>{" "}
-                environment variable on the server.
+                Keep people updated on their phone so they don&apos;t have to
+                stand and watch the board.
               </p>
             </div>
             {form.keyConfigured ? (
-              <Badge className="bg-emerald-100 text-emerald-700">Key detected</Badge>
+              <Badge className="bg-emerald-100 text-emerald-700">Connected</Badge>
             ) : (
-              <Badge className="bg-amber-100 text-amber-700">Key missing</Badge>
+              <Badge className="bg-amber-100 text-amber-700">Not connected</Badge>
             )}
           </div>
 
           {!form.keyConfigured && (
             <p className="rounded-xl bg-amber-50 px-3.5 py-3 text-sm text-amber-800">
-              Add <code>AISENSY_API_KEY</code> to your environment variables and
-              redeploy, then reload this page.
+              Messaging isn&apos;t connected yet. Once it&apos;s set up, this page
+              will switch on automatically.
             </p>
           )}
 
-          <label className="flex items-center gap-2.5 text-sm text-slate-700">
+          <label className="flex cursor-pointer items-center gap-2.5 text-sm text-slate-700">
             <input
               type="checkbox"
               checked={form.enabled}
               onChange={(e) => set("enabled", e.target.checked)}
               disabled={!form.keyConfigured}
-              className="h-4 w-4 rounded border-slate-300 text-brand-600 disabled:opacity-40"
+              className="h-4 w-4 cursor-pointer rounded border-slate-300 text-brand-600 disabled:cursor-not-allowed disabled:opacity-40"
             />
-            Send WhatsApp notifications
+            Send messages to customers
           </label>
         </CardContent>
       </Card>
@@ -134,51 +138,55 @@ export function WhatsappSettingsForm({
       <Card>
         <CardContent className="space-y-4 pt-6">
           <div>
-            <h2 className="text-sm font-semibold text-slate-900">Campaigns</h2>
+            <h2 className="text-sm font-semibold text-slate-900">
+              When to message
+            </h2>
             <p className="mt-0.5 text-sm text-slate-500">
-              AiSensy sends approved templates by campaign name, not free text.
-              Create one Live campaign per moment below.
+              Choose the moments worth interrupting someone for, and give each
+              one the message you&apos;ve already had approved.
             </p>
           </div>
 
           <div className="space-y-4">
             <div>
-              <label className="mb-2 flex items-center gap-2.5 text-sm text-slate-700">
+              <label className="mb-2 flex cursor-pointer items-center gap-2.5 text-sm text-slate-700">
                 <input
                   type="checkbox"
                   checked={form.notify_on_join}
                   onChange={(e) => set("notify_on_join", e.target.checked)}
-                  className="h-4 w-4 rounded border-slate-300 text-brand-600"
+                  className="h-4 w-4 cursor-pointer rounded border-slate-300 text-brand-600"
                 />
-                When someone takes a number
+                When they take a number
               </label>
               <Input
                 value={form.campaign_joined}
                 onChange={(e) => set("campaign_joined", e.target.value)}
-                placeholder="synq_queue_joined"
+                placeholder="Message name"
                 disabled={!form.notify_on_join}
+                aria-label="Message to send when someone takes a number"
               />
             </div>
 
             <div>
-              <label className="mb-2 flex items-center gap-2.5 text-sm text-slate-700">
+              <label className="mb-2 flex cursor-pointer items-center gap-2.5 text-sm text-slate-700">
                 <input
                   type="checkbox"
                   checked={form.notify_almost_up}
                   onChange={(e) => set("notify_almost_up", e.target.checked)}
-                  className="h-4 w-4 rounded border-slate-300 text-brand-600"
+                  className="h-4 w-4 cursor-pointer rounded border-slate-300 text-brand-600"
                 />
                 When they&apos;re nearly up
               </label>
               <Input
                 value={form.campaign_almost_up}
                 onChange={(e) => set("campaign_almost_up", e.target.value)}
-                placeholder="synq_almost_up"
+                placeholder="Message name"
                 disabled={!form.notify_almost_up}
+                aria-label="Message to send when someone is nearly up"
               />
               <div className="mt-2 flex items-center gap-2">
                 <Label htmlFor="threshold" className="mb-0 text-xs text-slate-500">
-                  Notify when this many people are ahead
+                  Send it once this many people are ahead
                 </Label>
                 <Input
                   id="threshold"
@@ -196,72 +204,73 @@ export function WhatsappSettingsForm({
             </div>
 
             <div>
-              <label className="mb-2 flex items-center gap-2.5 text-sm text-slate-700">
+              <label className="mb-2 flex cursor-pointer items-center gap-2.5 text-sm text-slate-700">
                 <input
                   type="checkbox"
                   checked={form.notify_on_called}
                   onChange={(e) => set("notify_on_called", e.target.checked)}
-                  className="h-4 w-4 rounded border-slate-300 text-brand-600"
+                  className="h-4 w-4 cursor-pointer rounded border-slate-300 text-brand-600"
                 />
                 When their number is called
               </label>
               <Input
                 value={form.campaign_called}
                 onChange={(e) => set("campaign_called", e.target.value)}
-                placeholder="synq_your_turn"
+                placeholder="Message name"
                 disabled={!form.notify_on_called}
+                aria-label="Message to send when a number is called"
               />
             </div>
           </div>
 
           <div className="rounded-xl bg-slate-50 px-3.5 py-3 text-xs text-slate-500">
-            Each template receives four variables in this order:{" "}
-            <code className="text-slate-700">
-              {"{{1}}"} name, {"{{2}}"} queue number, {"{{3}}"} queue name,{" "}
-              {"{{4}}"} people ahead
-            </code>
-            .
+            Each message can include their name, their number, the queue name,
+            and how many people are ahead — in that order.
           </div>
         </CardContent>
       </Card>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <Button type="submit" disabled={busy} className="gap-1.5">
-          {saved ? (
-            <>
-              <Check size={15} /> Saved
-            </>
-          ) : busy ? (
-            "Saving…"
-          ) : (
-            "Save settings"
-          )}
-        </Button>
-      </div>
+      <Button type="submit" disabled={busy} className="cursor-pointer gap-1.5">
+        {saved ? (
+          <>
+            <Check size={15} aria-hidden="true" /> Saved
+          </>
+        ) : busy ? (
+          "Saving…"
+        ) : (
+          "Save settings"
+        )}
+      </Button>
 
       <Card>
         <CardContent className="space-y-3 pt-6">
           <div>
             <h2 className="text-sm font-semibold text-slate-900">Send a test</h2>
             <p className="mt-0.5 text-sm text-slate-500">
-              Fires one real message using your saved key, so save first.
+              Sends one real message to the number below, so save your changes
+              first.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            <Label htmlFor="test-phone" className="sr-only">
+              Phone number to test with
+            </Label>
             <Input
+              id="test-phone"
+              type="tel"
               value={testPhone}
               onChange={(e) => setTestPhone(e.target.value)}
               placeholder="+62 812 3456 7890"
-              className="flex-1 min-w-[200px]"
+              className="min-w-[200px] flex-1"
             />
             <Button
               type="button"
               variant="outline"
-              className="gap-1.5"
+              className="cursor-pointer gap-1.5"
               onClick={handleTest}
               disabled={busy || !testPhone.trim()}
             >
-              <Send size={14} /> Send test
+              <Send size={14} aria-hidden="true" /> Send test
             </Button>
           </div>
         </CardContent>
