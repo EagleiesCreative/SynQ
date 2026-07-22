@@ -14,27 +14,25 @@ export default async function DisplayEventPage({
   const { eventId } = await params;
   const supabase = await createClient();
 
-  const { data: organization } = await supabase
-    .from("organizations")
+  const { data: event } = await supabase
+    .from("events")
     .select("id, name")
     .eq("id", eventId)
     .maybeSingle();
 
-  if (!organization) {
+  if (!event) {
     return (
       <main className="min-h-screen bg-background px-6 py-12 flex items-center justify-center">
         <Card className="max-w-sm w-full">
           <EmptyState
             icon={SearchX}
             title="Display board not found"
-            description="This link doesn't point to a valid queue. Ask an admin for the correct display link."
+            description="This link doesn't point to a valid event. Ask an admin for the correct display link."
           />
         </Card>
       </main>
     );
   }
 
-  return (
-    <DisplayBoard organizationId={organization.id} organizationName={organization.name} />
-  );
+  return <DisplayBoard eventId={event.id} eventName={event.name} />;
 }

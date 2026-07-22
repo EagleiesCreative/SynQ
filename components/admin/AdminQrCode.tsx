@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 
 type Mode = "join" | "display";
 
-export function AdminQrCode({ organizationId }: { organizationId: string }) {
+export function AdminQrCode({ eventId }: { eventId: string }) {
   const [origin, setOrigin] = useState("");
   const [mode, setMode] = useState<Mode>("join");
   const [copied, setCopied] = useState(false);
@@ -24,20 +24,20 @@ export function AdminQrCode({ organizationId }: { organizationId: string }) {
     setCopied(false);
   }, [mode]);
 
-  if (!organizationId) {
+  if (!eventId) {
     return (
       <Card className="max-w-md">
         <CardContent className="p-8 text-center text-sm text-slate-500">
-          We couldn&apos;t find an organization on your account yet. Try
-          reloading, or contact support if this persists.
+          We couldn&apos;t find this event. Try reloading, or contact support
+          if this persists.
         </CardContent>
       </Card>
     );
   }
 
   const url =
-    origin && organizationId
-      ? `${origin}/${mode === "join" ? "join" : "display"}/${organizationId}`
+    origin && eventId
+      ? `${origin}/${mode === "join" ? "join" : "display"}/${eventId}`
       : "";
 
   function downloadPng() {

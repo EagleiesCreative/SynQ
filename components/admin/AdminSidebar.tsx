@@ -2,25 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  LayoutDashboard,
-  ListChecks,
-  ListOrdered,
-  Monitor as MonitorIcon,
-  Users2,
-  QrCode,
-  Settings,
-} from "lucide-react";
+import { CalendarDays, Users2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const items = [
-  { href: "/admin", label: "Overview", icon: LayoutDashboard },
-  { href: "/admin/queue", label: "Live queue", icon: ListOrdered },
-  { href: "/admin/services", label: "Services", icon: ListChecks },
-  { href: "/admin/counters", label: "Counters", icon: MonitorIcon },
+  { href: "/admin", label: "Events", icon: CalendarDays },
   { href: "/admin/staff", label: "Staff", icon: Users2 },
-  { href: "/admin/qr", label: "QR code", icon: QrCode },
-  { href: "/admin/settings", label: "Settings", icon: Settings },
 ];
 
 export function AdminSidebar() {
@@ -32,7 +19,7 @@ export function AdminSidebar() {
         {items.map((item) => {
           const active =
             item.href === "/admin"
-              ? pathname === "/admin"
+              ? pathname === "/admin" || pathname.startsWith("/admin/events")
               : pathname.startsWith(item.href);
           return (
             <Link

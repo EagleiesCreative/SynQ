@@ -54,41 +54,35 @@ export async function requireAdmin(): Promise<Actor> {
   return actor;
 }
 
-/** Throws unless `counterId` belongs to `orgId`. */
-export async function assertCounterInOrg(db: Db, counterId: string, orgId: string) {
+/** Throws unless `eventId` belongs to `orgId`. */
+export async function assertEventInOrg(db: Db, eventId: string, orgId: string) {
   const { data } = await db
-    .from("counters")
+    .from("events")
     .select("id")
-    .eq("id", counterId)
+    .eq("id", eventId)
     .eq("organization_id", orgId)
     .maybeSingle();
-  if (!data) throw new UnauthorizedError("That counter isn't in your organization.");
-}
-
-/** Throws unless `serviceId` belongs to `orgId`. */
-export async function assertServiceInOrg(db: Db, serviceId: string, orgId: string) {
-  const { data } = await db
-    .from("services")
-    .select("id")
-    .eq("id", serviceId)
-    .eq("organization_id", orgId)
-    .maybeSingle();
-  if (!data) throw new UnauthorizedError("That service isn't in your organization.");
+  if (!data) throw new UnauthorizedError("That event isn't in your organization.");
 }
 
 /**
  * Tickets have no organization_id of their own — they inherit the tenant
- * from the service they were issued against.
+ * from the event they were issued against. Returns the ticket's event id.
  */
-export async function assertTicketInOrg(db: Db, ticketId: string, orgId: string) {
+export async function assertTicketInOrg(
+  db: Db,
+  ticketId: string,
+  orgId: string
+): Promise<string> {
   const { data } = await db
     .from("tickets")
-    .select("id, service:services!tickets_service_id_fkey(organization_id)")
+    .select("id, event_id, event:events!tickets_event_id_fkey(organization_id)")
     .eq("id", ticketId)
     .maybeSingle();
 
-  const service = Array.isArray(data?.service) ? data?.service[0] : data?.service;
-  if (!data || service?.organization_id !== orgId) {
+  const event = Array.isArray(data?.event) ? data?.event[0] : data?.event;
+  if (!data || event?.organization_id !== orgId) {
     throw new UnauthorizedError("That ticket isn't in your organization.");
   }
+  return data.event_id as string;
 }

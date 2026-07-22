@@ -1,285 +1,213 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { formatTime } from "@/lib/utils";
-import { Volume2 } from "lucide-react";
+import type { Ticket } from "@/lib/database.types";
 
-interface CounterRow {
-  id: string;
-  name: string;
-  is_active: boolean;
-  ticket: {
-    id: string;
-    code: string;
-    customer_name: string | null;
-    service: { name: string; color: string } | null;
-  } | null;
-}
-
-interface HistoryRow {
-  id: string;
-  code: string;
-  status: string;
-  called_at: string | null;
-  service: { name: string; color: string } | null;
-}
-
-interface WaitingCount {
-  service_id: string;
-  name: string;
-  color: string;
-  count: number;
-}
-
+/**
+ * Full-screen TV board for a single event queue.
+ *
+ * Layout: the number being served fills the centre, the next few numbers
+ * ride a carousel down the right, and the event name plus a live clock sit
+ * along the top.
+ */
 export function DisplayBoard({
-  organizationId,
-  organizationName,
+  eventId,
+  eventName,
 }: {
-  organizationId: string;
-  organizationName: string;
+  eventId: string;
+  eventName: string;
 }) {
-  const [counters, setCounters] = useState<CounterRow[]>([]);
-  const [history, setHistory] = useState<HistoryRow[]>([]);
-  const [waiting, setWaiting] = useState<WaitingCount[]>([]);
+  const [current, setCurrent] = useState<Ticket | null>(null);
+  const [upcoming, setUpcoming] = useState<Ticket[]>([]);
+  const [waitingTotal, setWaitingTotal] = useState(0);
   const [now, setNow] = useState<Date | null>(null);
-  const [lastCalledId, setLastCalledId] = useState<string | null>(null);
+  const [flash, setFlash] = useState(false);
+  const lastAnnounced = useRef<string | null>(null);
 
-  const refresh = useCallback(async () => {
+  // Clock. Rendered only after mount so server/client markup can't disagree.
+  useEffect(() => {
+    setNow(new Date());
+    const t = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  const load = useCallback(async () => {
     const supabase = createClient();
+    const [{ data: ev }, { data: rows, count }] = await Promise.all([
+      supabase
+        .from("events")
+        .select("current_ticket_id")
+        .eq("id", eventId)
+        .maybeSingle(),
+      supabase
+        .from("tickets")
+        .select("*", { count: "exact" })
+        .eq("event_id", eventId)
+        .in("status", ["waiting", "called", "serving"])
+        .order("created_at", { ascending: true })
+        .limit(20),
+    ]);
 
-    const { data: countersData } = await supabase
-      .from("counters")
-      .select(
-        "id, name, is_active, ticket:tickets!counters_current_ticket_fk(id, code, customer_name, service:services(name,color))"
-      )
-      .eq("organization_id", organizationId)
-      .eq("is_active", true)
-      .order("name", { ascending: true });
+    const all = (rows as Ticket[]) || [];
+    const serving = all.find((t) => t.id === ev?.current_ticket_id) || null;
+    const waiting = all.filter((t) => t.status === "waiting");
 
-    setCounters((countersData as unknown as CounterRow[]) || []);
+    setCurrent(serving);
+    setUpcoming(waiting.slice(0, 4));
+    setWaitingTotal(count ? Math.max(waiting.length, count - (serving ? 1 : 0)) : waiting.length);
 
-    const { data: services } = await supabase
-      .from("services")
-      .select("id, name, color")
-      .eq("organization_id", organizationId)
-      .eq("is_active", true)
-      .order("sort_order", { ascending: true });
-
-    const serviceIds = (services || []).map((s: { id: string }) => s.id);
-
-    const { data: historyData } = serviceIds.length
-      ? await supabase
-          .from("tickets")
-          .select("id, code, status, called_at, service:services(name,color)")
-          .in("service_id", serviceIds)
-          .in("status", ["called", "serving", "served"])
-          .order("called_at", { ascending: false })
-          .limit(8)
-      : { data: [] };
-
-    setHistory((historyData as unknown as HistoryRow[]) || []);
-
-    const { data: waitingTickets } = serviceIds.length
-      ? await supabase
-          .from("tickets")
-          .select("service_id")
-          .in("service_id", serviceIds)
-          .eq("status", "waiting")
-      : { data: [] };
-
-    const counts = new Map<string, number>();
-    (waitingTickets || []).forEach((t: { service_id: string }) => {
-      counts.set(t.service_id, (counts.get(t.service_id) || 0) + 1);
-    });
-
-    setWaiting(
-      (services || []).map((s: { id: string; name: string; color: string }) => ({
-        service_id: s.id,
-        name: s.name,
-        color: s.color,
-        count: counts.get(s.id) || 0,
-      }))
-    );
-  }, [organizationId]);
+    // Pulse whenever a different number comes up (or the same one is recalled).
+    const stamp = serving ? `${serving.id}:${serving.called_at ?? ""}` : null;
+    if (stamp && stamp !== lastAnnounced.current) {
+      lastAnnounced.current = stamp;
+      setFlash(true);
+      setTimeout(() => setFlash(false), 2200);
+    }
+  }, [eventId]);
 
   useEffect(() => {
-    refresh();
+    load();
     const supabase = createClient();
-
     const channel = supabase
-      .channel("display-board")
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "tickets" },
-        (payload) => {
-          const t = payload.new as { id: string; status: string };
-          if (t.status === "called") setLastCalledId(t.id);
-          refresh();
-        }
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "tickets" },
-        () => refresh()
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "counters" },
-        () => refresh()
-      )
+      .channel(`display-${eventId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "tickets" }, load)
+      .on("postgres_changes", { event: "*", schema: "public", table: "events" }, load)
       .subscribe();
 
-    setNow(new Date());
-    const clock = setInterval(() => setNow(new Date()), 1000);
-
+    // Safety net in case the realtime socket drops on a TV left running.
+    const poll = setInterval(load, 15000);
     return () => {
       supabase.removeChannel(channel);
-      clearInterval(clock);
+      clearInterval(poll);
     };
-  }, [refresh]);
-
-  useEffect(() => {
-    if (!lastCalledId) return;
-    const t = setTimeout(() => setLastCalledId(null), 4000);
-    return () => clearTimeout(t);
-  }, [lastCalledId]);
+  }, [eventId, load]);
 
   return (
-    <main className="min-h-screen bg-background flex flex-col">
-      <header className="flex items-center justify-between px-8 py-5 border-b border-slate-200 bg-white">
-        <div className="flex items-center gap-3">
-          <div className="h-9 w-9 rounded-xl bg-brand-600 text-white font-semibold flex items-center justify-center text-sm">
+    <main className="flex min-h-screen flex-col bg-slate-950 text-white">
+      {/* Header: event name + clock */}
+      <header className="flex items-center justify-between border-b border-white/10 px-10 py-6">
+        <div className="flex items-center gap-4">
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-brand-600 text-lg font-bold">
             S
           </div>
-          <h1 className="text-lg font-semibold text-slate-900">
-            {organizationName} — Now Serving
+          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+            {eventName}
           </h1>
         </div>
         <div className="text-right">
-          <p className="text-2xl font-semibold text-slate-900 tabular-nums">
+          <p className="text-3xl font-semibold tabular-nums sm:text-4xl">
             {now
-              ? now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
-              : " "}
+              ? now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+              : "--:--"}
           </p>
-          <p className="text-xs text-slate-400">
+          <p className="text-sm text-white/40">
             {now
-              ? now.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })
-              : " "}
+              ? now.toLocaleDateString([], {
+                  weekday: "long",
+                  day: "numeric",
+                  month: "long",
+                })
+              : ""}
           </p>
         </div>
       </header>
 
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-4 gap-6 p-8">
-        <section className="lg:col-span-3">
-          <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-4">
-            Counters
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
-            {counters.map((c) => {
-              const flashing = c.ticket && c.ticket.id === lastCalledId;
-              return (
-                <div
-                  key={c.id}
-                  className={`rounded-xl border bg-white p-6 shadow-card transition-all ${
-                    flashing
-                      ? "border-brand-400 ring-4 ring-brand-100"
-                      : "border-slate-200"
-                  }`}
-                >
-                  <div className="flex items-center justify-between mb-4">
-                    <p className="text-sm font-medium text-slate-500">{c.name}</p>
-                    {flashing && (
-                      <Volume2 size={16} className="text-brand-500 animate-pulse-soft" />
-                    )}
-                  </div>
-                  {c.ticket ? (
-                    <>
-                      <p className="text-5xl font-semibold text-slate-900 tracking-tight tabular-nums">
-                        {c.ticket.code}
-                      </p>
-                      <p
-                        className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded-full"
-                        style={{
-                          backgroundColor: `${c.ticket.service?.color}1a`,
-                          color: c.ticket.service?.color,
-                        }}
-                      >
-                        {c.ticket.service?.name}
-                      </p>
-                    </>
-                  ) : (
-                    <p className="text-3xl font-semibold text-slate-300">— — —</p>
-                  )}
-                </div>
-              );
-            })}
-            {counters.length === 0 && (
-              <p className="text-sm text-slate-400 col-span-full">
-                No active counters yet.
+      <div className="grid flex-1 gap-8 p-10 lg:grid-cols-[1fr_22rem]">
+        {/* Now serving */}
+        <section className="flex items-center justify-center">
+          <div
+            className={`w-full max-w-3xl rounded-[2rem] border p-14 text-center transition-all duration-500 ${
+              flash
+                ? "scale-[1.02] border-brand-400 bg-brand-600/20 shadow-[0_0_90px_-10px] shadow-brand-500/60"
+                : "border-white/10 bg-white/5"
+            }`}
+          >
+            <p className="text-lg font-medium uppercase tracking-[0.3em] text-brand-300">
+              Now serving
+            </p>
+            <p
+              className={`mt-6 font-bold leading-none tabular-nums ${
+                current
+                  ? "text-[8rem] sm:text-[11rem] lg:text-[13rem]"
+                  : "text-[6rem] text-white/25"
+              } ${flash ? "animate-pulse" : ""}`}
+            >
+              {current?.code || "—"}
+            </p>
+            {current?.customer_name && (
+              <p className="mt-6 text-3xl text-white/70">{current.customer_name}</p>
+            )}
+            {!current && (
+              <p className="mt-6 text-2xl text-white/40">
+                Please wait for the next number
               </p>
             )}
           </div>
-
-          <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mt-8 mb-4">
-            Recently called
-          </h2>
-          <div className="rounded-xl border border-slate-200 bg-white shadow-card divide-y divide-slate-100">
-            {history.length === 0 && (
-              <p className="px-5 py-4 text-sm text-slate-400">No calls yet.</p>
-            )}
-            {history.map((h) => (
-              <div
-                key={h.id}
-                className="flex items-center justify-between px-5 py-3"
-              >
-                <div className="flex items-center gap-3">
-                  <span
-                    className="h-2.5 w-2.5 rounded-full"
-                    style={{ backgroundColor: h.service?.color }}
-                  />
-                  <span className="font-semibold text-slate-800 tabular-nums">
-                    {h.code}
-                  </span>
-                  <span className="text-sm text-slate-500">
-                    {h.service?.name}
-                  </span>
-                </div>
-                <span className="text-xs text-slate-400">
-                  {formatTime(h.called_at)}
-                </span>
-              </div>
-            ))}
-          </div>
         </section>
 
-        <aside>
-          <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-4">
-            Waiting
-          </h2>
-          <div className="space-y-3">
-            {waiting.map((w) => (
+        {/* Upcoming carousel */}
+        <aside className="flex flex-col">
+          <p className="mb-5 text-sm font-medium uppercase tracking-[0.25em] text-white/40">
+            Up next
+          </p>
+          <div className="flex-1 space-y-4 overflow-hidden">
+            {upcoming.map((t, i) => (
               <div
-                key={w.service_id}
-                className="rounded-xl border border-slate-200 bg-white p-4 flex items-center justify-between shadow-card"
+                key={t.id}
+                style={{ animationDelay: `${i * 90}ms` }}
+                className={`animate-[slideUp_0.5s_ease-out_both] rounded-2xl border px-7 py-6 ${
+                  i === 0
+                    ? "border-brand-400/40 bg-white/10"
+                    : "border-white/10 bg-white/[0.03]"
+                }`}
               >
-                <div className="flex items-center gap-2.5">
-                  <span
-                    className="h-2.5 w-2.5 rounded-full"
-                    style={{ backgroundColor: w.color }}
-                  />
-                  <span className="text-sm font-medium text-slate-700">
-                    {w.name}
-                  </span>
-                </div>
-                <span className="text-lg font-semibold text-slate-900 tabular-nums">
-                  {w.count}
-                </span>
+                <p
+                  className={`font-bold leading-none tabular-nums ${
+                    i === 0 ? "text-6xl text-white" : "text-4xl text-white/55"
+                  }`}
+                >
+                  {t.code}
+                </p>
+                {t.customer_name && (
+                  <p
+                    className={`mt-2 truncate ${
+                      i === 0 ? "text-lg text-white/60" : "text-sm text-white/35"
+                    }`}
+                  >
+                    {t.customer_name}
+                  </p>
+                )}
               </div>
             ))}
+
+            {upcoming.length === 0 && (
+              <div className="rounded-2xl border border-dashed border-white/10 px-7 py-10 text-center text-white/30">
+                Nobody waiting
+              </div>
+            )}
           </div>
+
+          {waitingTotal > 0 && (
+            <p className="mt-6 text-center text-sm text-white/30">
+              {waitingTotal === 1 ? "1 person waiting" : `${waitingTotal} people waiting`}
+            </p>
+          )}
         </aside>
       </div>
+
+      <style jsx global>{`
+        @keyframes slideUp {
+          from {
+            opacity: 0;
+            transform: translateY(14px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+      `}</style>
     </main>
   );
 }

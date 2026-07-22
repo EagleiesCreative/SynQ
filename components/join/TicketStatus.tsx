@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { QRCodeCanvas } from "qrcode.react";
 import { createClient } from "@/lib/supabase/client";
-import type { Ticket, Service, Counter } from "@/lib/database.types";
+import type { Ticket, Event } from "@/lib/database.types";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -17,8 +17,7 @@ import { CheckCircle2, Clock, XCircle, Users, BellRing, Smartphone, MapPin, Shar
 
 export function TicketStatus({ ticketId }: { ticketId: string }) {
   const [ticket, setTicket] = useState<Ticket | null>(null);
-  const [service, setService] = useState<Service | null>(null);
-  const [counter, setCounter] = useState<Counter | null>(null);
+  const [event, setEvent] = useState<Event | null>(null);
   const [position, setPosition] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [shareUrl, setShareUrl] = useState("");
@@ -39,7 +38,7 @@ export function TicketStatus({ ticketId }: { ticketId: string }) {
       const { count } = await supabase
         .from("tickets")
         .select("*", { count: "exact", head: true })
-        .eq("service_id", t.service_id)
+        .eq("event_id", t.event_id)
         .eq("status", "waiting")
         .lt("created_at", t.created_at);
       setPosition((count || 0) + 1);
@@ -63,21 +62,12 @@ export function TicketStatus({ ticketId }: { ticketId: string }) {
       }
       setTicket(t as Ticket);
 
-      const { data: s } = await supabase
-        .from("services")
+      const { data: e } = await supabase
+        .from("events")
         .select("*")
-        .eq("id", t.service_id)
-        .single();
-      if (active) setService(s as Service);
-
-      if (t.counter_id) {
-        const { data: c } = await supabase
-          .from("counters")
-          .select("*")
-          .eq("id", t.counter_id)
-          .single();
-        if (active) setCounter(c as Counter);
-      }
+        .eq("id", t.event_id)
+        .maybeSingle();
+      if (active) setEvent(e as Event);
 
       await loadPosition(t as Ticket);
       if (active) setLoading(false);
@@ -98,14 +88,6 @@ export function TicketStatus({ ticketId }: { ticketId: string }) {
         async (payload) => {
           const updated = payload.new as Ticket;
           setTicket(updated);
-          if (updated.counter_id) {
-            const { data: c } = await supabase
-              .from("counters")
-              .select("*")
-              .eq("id", updated.counter_id)
-              .single();
-            setCounter(c as Counter);
-          }
           await loadPosition(updated);
         }
       )
@@ -158,7 +140,7 @@ export function TicketStatus({ ticketId }: { ticketId: string }) {
     );
   }
 
-  if (!ticket || !service) {
+  if (!ticket || !event) {
     return (
       <main className="min-h-screen flex items-center justify-center bg-slate-50 px-6">
         <Card className="max-w-sm border-slate-200 shadow-xl rounded-3xl overflow-hidden bg-white">
@@ -198,7 +180,6 @@ export function TicketStatus({ ticketId }: { ticketId: string }) {
       {isActive && (
         <YourTurnOverlay
           code={ticket.code}
-          counterName={counter?.name}
           isBeingServed={ticket.status === "serving"}
           partySize={ticket.party_size}
         />
@@ -220,7 +201,7 @@ export function TicketStatus({ ticketId }: { ticketId: string }) {
         {/* Boarding Pass Ticket Container */}
         <Card className="relative bg-white border border-slate-200/80 shadow-xl rounded-3xl overflow-hidden select-none">
           {/* Top color strip */}
-          <div className="h-2 w-full" style={{ backgroundColor: service.color }} />
+          <div className="h-2 w-full bg-brand-600" />
 
           {/* Ticket punches left & right */}
           <div className="absolute -left-3 top-[52%] -translate-y-1/2 w-6 h-6 rounded-full bg-slate-50 border-r border-slate-200/80 z-10" />
@@ -229,7 +210,7 @@ export function TicketStatus({ ticketId }: { ticketId: string }) {
           {/* Ticket Upper Half */}
           <div className="p-8 text-center pb-6">
             <span className="text-xs font-bold uppercase tracking-widest text-slate-400 block mb-1">
-              {service.name}
+              {event.name}
             </span>
             
             {(ticket.customer_name || ticket.party_size > 1) && (
@@ -314,12 +295,10 @@ export function TicketStatus({ ticketId }: { ticketId: string }) {
                     <BellRing size={16} />
                   </div>
                   <p className="text-sm font-bold text-slate-800">Your Number is Called!</p>
-                  {counter?.name && (
-                    <div className="inline-flex items-center gap-1.5 text-emerald-700 font-bold bg-emerald-100/50 px-3.5 py-1.5 rounded-xl text-sm">
-                      <MapPin size={15} />
-                      <span>Proceed to {counter.name}</span>
-                    </div>
-                  )}
+                  <div className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-100/50 px-3.5 py-1.5 text-sm font-bold text-emerald-700">
+                    <MapPin size={15} />
+                    <span>Please come forward</span>
+                  </div>
                 </div>
               )}
 
@@ -378,7 +357,7 @@ export function TicketStatus({ ticketId }: { ticketId: string }) {
         {/* Ticket Action Buttons (Share, Leave, etc.) */}
         {isDone ? (
           <div className="mt-6 text-center">
-            <Link href={`/join/${service.organization_id}`}>
+            <Link href={`/join/${event.id}`}>
               <Button variant="primary" className="w-full py-3.5 rounded-xl font-bold bg-slate-900 text-white hover:bg-slate-800">
                 Get Another Ticket
               </Button>
