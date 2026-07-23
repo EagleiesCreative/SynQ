@@ -79,37 +79,47 @@ export async function getCurrentUserAndProfile(): Promise<{
     }
   }
 
-  // Brand-new person: give them their own organization and make them its
-  // owner/admin. They can later join someone else's team with a join code.
-  if (!profile) {
+  // Anyone without a team of their own gets one, and owns it. This covers
+  // both a brand-new sign-in and an existing profile left without an
+  // organization (removed from a team, or created before this rule existed)
+  // — otherwise they'd land on "admin access required" with nowhere to go.
+  if (!profile || !profile.organization_id) {
     const { data: org, error: orgError } = await admin
       .from("organizations")
       .insert({ name: `${fullName}'s Organization` })
       .select("id")
       .single();
-    if (orgError || !org) return { user, profile: null };
+    if (orgError || !org) return { user, profile };
 
-    const { data: created, error: profileError } = await admin
-      .from("profiles")
-      .insert({
-        id: clerkUser.id,
-        full_name: fullName,
-        role: "admin",
-        organization_id: org.id,
-        email,
-      })
-      .select("*")
-      .single();
+    const { data: placed, error: placeError } = profile
+      ? await admin
+          .from("profiles")
+          .update({ organization_id: org.id, role: "admin", full_name: fullName })
+          .eq("id", profile.id)
+          .select("*")
+          .single()
+      : await admin
+          .from("profiles")
+          .insert({
+            id: clerkUser.id,
+            full_name: fullName,
+            role: "admin",
+            organization_id: org.id,
+            email,
+          })
+          .select("*")
+          .single();
 
-    if (profileError || !created) {
+    if (placeError || !placed) {
       // Don't leave an orphaned, unreachable organization behind.
       await admin.from("organizations").delete().eq("id", org.id);
-      return { user, profile: null };
+      console.error("[auth] failed to provision organization:", placeError);
+      return { user, profile };
     }
 
     await admin
       .from("organizations")
-      .update({ owner_id: clerkUser.id })
+      .update({ owner_id: placed.id })
       .eq("id", org.id);
 
     // Each account runs exactly one queue, created up front so the
@@ -120,7 +130,7 @@ export async function getCurrentUserAndProfile(): Promise<{
       .select("id")
       .maybeSingle();
 
-    profile = created as Profile;
+    profile = placed as Profile;
   }
 
   return { user, profile };

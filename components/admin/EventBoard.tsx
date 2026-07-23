@@ -141,11 +141,13 @@ export function EventBoard({
   initialCurrent,
   initialWaiting,
   initialSkipped,
+  isAdmin = false,
 }: {
   event: Event;
   initialCurrent: Ticket | null;
   initialWaiting: Ticket[];
   initialSkipped: Ticket[];
+  isAdmin?: boolean;
 }) {
   const showToast = useToast();
   const [current, setCurrent] = useState<Ticket | null>(initialCurrent);
@@ -372,6 +374,7 @@ export function EventBoard({
             >
               <UserPlus size={14} aria-hidden="true" /> Walk-up number
             </Button>
+            {isAdmin && (
             <Button
               variant="ghost"
               size="sm"
@@ -388,6 +391,7 @@ export function EventBoard({
             >
               <RotateCcw size={14} aria-hidden="true" /> Reset queue
             </Button>
+            )}
           </div>
         </CardContent>
       </Card>

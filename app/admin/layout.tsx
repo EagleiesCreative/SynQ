@@ -5,6 +5,11 @@ import { AdminSidebar } from "@/components/admin/AdminSidebar";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * Everyone on the team works the same queue board. Agents get the board and
+ * nothing else; the owner and any admins also get notifications and staff.
+ * Per-action authorization still lives in the server actions themselves.
+ */
 export default async function AdminLayout({
   children,
 }: {
@@ -13,34 +18,15 @@ export default async function AdminLayout({
   const { user, profile } = await getCurrentUserAndProfile();
   if (!user) redirect("/login?redirect=/admin");
 
-  if (profile?.role !== "admin") {
-    return (
-      <div className="min-h-screen bg-background">
-        <StaffHeader
-          title="Admin"
-          fullName={profile?.full_name || user.email || ""}
-        />
-        <div className="max-w-md mx-auto px-6 py-16 text-center">
-          <p className="text-lg font-semibold text-slate-900">
-            Admin access required
-          </p>
-          <p className="mt-2 text-sm text-slate-500">
-            Your account doesn&apos;t have admin permissions. Ask the queue owner to make you an admin from the Staff page.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-background">
       <StaffHeader
-        title="Admin"
+        title="Queue"
         fullName={profile?.full_name || user.email || ""}
       />
-      <div className="max-w-7xl mx-auto flex flex-col sm:flex-row gap-6 px-6 py-8">
-        <AdminSidebar />
-        <div className="flex-1 min-w-0">{children}</div>
+      <div className="mx-auto flex max-w-7xl flex-col gap-6 px-6 py-8 sm:flex-row">
+        <AdminSidebar isAdmin={profile?.role === "admin"} />
+        <div className="min-w-0 flex-1">{children}</div>
       </div>
     </div>
   );

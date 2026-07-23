@@ -14,6 +14,7 @@ export const dynamic = "force-dynamic";
 export default async function QueuePage() {
   const { profile } = await getCurrentUserAndProfile();
   const organizationId = profile?.organization_id || "";
+  const isAdmin = profile?.role === "admin";
 
   const event = await getOrCreateEvent(
     organizationId,
@@ -66,17 +67,20 @@ export default async function QueuePage() {
         initialCurrent={tickets.find((t) => t.id === event.current_ticket_id) || null}
         initialWaiting={tickets.filter((t) => t.status === "waiting")}
         initialSkipped={tickets.filter((t) => t.status === "skipped")}
+        isAdmin={isAdmin}
       />
 
-      <div className="grid gap-5 lg:grid-cols-2">
-        <EventSettings event={event} />
-        <div>
-          <h2 className="mb-3 text-sm font-semibold text-slate-900">
-            QR code &amp; links
-          </h2>
-          <AdminQrCode eventId={event.id} />
+      {isAdmin && (
+        <div className="grid gap-5 lg:grid-cols-2">
+          <EventSettings event={event} />
+          <div>
+            <h2 className="mb-3 text-sm font-semibold text-slate-900">
+              QR code &amp; links
+            </h2>
+            <AdminQrCode eventId={event.id} />
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
